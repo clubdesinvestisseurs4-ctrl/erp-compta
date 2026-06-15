@@ -64,7 +64,7 @@ watch(activeSociete, () => {
     </div>
 
     <div class="card" v-if="result">
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Date</th>
@@ -78,21 +78,21 @@ watch(activeSociete, () => {
         </thead>
         <tbody>
           <tr v-for="(l, i) in result.lignes" :key="i">
-            <td>{{ l.date }}</td>
-            <td>{{ l.journalCode }}</td>
-            <td>{{ l.numero }}</td>
-            <td>{{ l.libelle }}</td>
-            <td class="num">{{ l.debit ? l.debit.toLocaleString('fr-FR') : '' }}</td>
-            <td class="num">{{ l.credit ? l.credit.toLocaleString('fr-FR') : '' }}</td>
-            <td class="num">{{ l.solde.toLocaleString('fr-FR') }}</td>
+            <td data-label="Date">{{ l.date }}</td>
+            <td data-label="Journal">{{ l.journalCode }}</td>
+            <td data-label="N°">{{ l.numero }}</td>
+            <td data-label="Libellé">{{ l.libelle }}</td>
+            <td class="num" data-label="Débit">{{ l.debit ? l.debit.toLocaleString('fr-FR') : '' }}</td>
+            <td class="num" data-label="Crédit">{{ l.credit ? l.credit.toLocaleString('fr-FR') : '' }}</td>
+            <td class="num" data-label="Solde">{{ l.solde.toLocaleString('fr-FR') }}</td>
           </tr>
         </tbody>
         <tfoot>
           <tr>
             <th colspan="4">Totaux</th>
-            <th class="num">{{ result.totalDebit.toLocaleString('fr-FR') }}</th>
-            <th class="num">{{ result.totalCredit.toLocaleString('fr-FR') }}</th>
-            <th class="num">{{ result.soldeFinal.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Débit">{{ result.totalDebit.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Crédit">{{ result.totalCredit.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Solde">{{ result.soldeFinal.toLocaleString('fr-FR') }}</th>
           </tr>
         </tfoot>
       </table>

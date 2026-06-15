@@ -112,7 +112,7 @@ watch(activeSociete, load, { immediate: true });
         </label>
       </div>
 
-      <table v-if="comptesFiltres.length">
+      <table v-if="comptesFiltres.length" class="table-cards">
         <thead>
           <tr>
             <th>Numéro</th>
@@ -122,9 +122,9 @@ watch(activeSociete, load, { immediate: true });
         </thead>
         <tbody>
           <tr v-for="c in comptesFiltres" :key="c.numero">
-            <td>{{ c.numero }}</td>
-            <td>{{ c.libelle }}</td>
-            <td>{{ c.classe }}</td>
+            <td data-label="Numéro">{{ c.numero }}</td>
+            <td data-label="Libellé">{{ c.libelle }}</td>
+            <td data-label="Classe">{{ c.classe }}</td>
           </tr>
         </tbody>
       </table>

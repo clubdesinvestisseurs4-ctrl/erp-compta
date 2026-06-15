@@ -48,7 +48,7 @@ watch(activeSociete, () => {
     </div>
 
     <div class="card" v-if="result">
-      <table v-if="result.lignes.length">
+      <table v-if="result.lignes.length" class="table-cards">
         <thead>
           <tr>
             <th>Compte</th>
@@ -61,21 +61,21 @@ watch(activeSociete, () => {
         </thead>
         <tbody>
           <tr v-for="l in result.lignes" :key="l.numero">
-            <td>{{ l.numero }}</td>
-            <td>{{ l.libelle }}</td>
-            <td class="num">{{ l.totalDebit.toLocaleString('fr-FR') }}</td>
-            <td class="num">{{ l.totalCredit.toLocaleString('fr-FR') }}</td>
-            <td class="num">{{ l.soldeDebiteur ? l.soldeDebiteur.toLocaleString('fr-FR') : '' }}</td>
-            <td class="num">{{ l.soldeCrediteur ? l.soldeCrediteur.toLocaleString('fr-FR') : '' }}</td>
+            <td data-label="Compte">{{ l.numero }}</td>
+            <td data-label="Libellé">{{ l.libelle }}</td>
+            <td class="num" data-label="Total débit">{{ l.totalDebit.toLocaleString('fr-FR') }}</td>
+            <td class="num" data-label="Total crédit">{{ l.totalCredit.toLocaleString('fr-FR') }}</td>
+            <td class="num" data-label="Solde débiteur">{{ l.soldeDebiteur ? l.soldeDebiteur.toLocaleString('fr-FR') : '' }}</td>
+            <td class="num" data-label="Solde créditeur">{{ l.soldeCrediteur ? l.soldeCrediteur.toLocaleString('fr-FR') : '' }}</td>
           </tr>
         </tbody>
         <tfoot>
           <tr>
             <th colspan="2">Totaux</th>
-            <th class="num">{{ result.totaux.totalDebit.toLocaleString('fr-FR') }}</th>
-            <th class="num">{{ result.totaux.totalCredit.toLocaleString('fr-FR') }}</th>
-            <th class="num">{{ result.totaux.soldeDebiteur.toLocaleString('fr-FR') }}</th>
-            <th class="num">{{ result.totaux.soldeCrediteur.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Total débit">{{ result.totaux.totalDebit.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Total crédit">{{ result.totaux.totalCredit.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Solde débiteur">{{ result.totaux.soldeDebiteur.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Solde créditeur">{{ result.totaux.soldeCrediteur.toLocaleString('fr-FR') }}</th>
           </tr>
         </tfoot>
       </table>

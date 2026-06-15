@@ -102,7 +102,7 @@ watch(type, load);
     </div>
 
     <div class="card">
-      <table v-if="tiersList.length">
+      <table v-if="tiersList.length" class="table-cards">
         <thead>
           <tr>
             <th>Compte</th>
@@ -115,12 +115,12 @@ watch(type, load);
         </thead>
         <tbody>
           <tr v-for="t in tiersList" :key="t.id">
-            <td>{{ t.compteNumero }}</td>
-            <td>{{ t.nom }}</td>
-            <td>{{ t.telephone }}</td>
-            <td>{{ t.email }}</td>
-            <td>{{ t.adresse }}</td>
-            <td><button class="btn danger" @click="supprimer(t)">Supprimer</button></td>
+            <td data-label="Compte">{{ t.compteNumero }}</td>
+            <td data-label="Nom">{{ t.nom }}</td>
+            <td data-label="Téléphone">{{ t.telephone }}</td>
+            <td data-label="Email">{{ t.email }}</td>
+            <td data-label="Adresse">{{ t.adresse }}</td>
+            <td data-label=""><button class="btn danger" @click="supprimer(t)">Supprimer</button></td>
           </tr>
         </tbody>
       </table>

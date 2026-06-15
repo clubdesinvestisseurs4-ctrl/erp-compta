@@ -134,7 +134,7 @@ watch(periode, load);
       </div>
 
       <h2>Total des heures du mois</h2>
-      <table v-if="totauxParEmploye.length">
+      <table v-if="totauxParEmploye.length" class="table-cards">
         <thead>
           <tr>
             <th>Employé</th>
@@ -143,8 +143,8 @@ watch(periode, load);
         </thead>
         <tbody>
           <tr v-for="t in totauxParEmploye" :key="t.employeId">
-            <td>{{ t.nom }}</td>
-            <td class="num">{{ t.heures }}</td>
+            <td data-label="Employé">{{ t.nom }}</td>
+            <td class="num" data-label="Heures">{{ t.heures }}</td>
           </tr>
         </tbody>
       </table>
@@ -153,7 +153,7 @@ watch(periode, load);
 
     <div class="card">
       <h2>Détail des pointages</h2>
-      <table v-if="pointages.length">
+      <table v-if="pointages.length" class="table-cards">
         <thead>
           <tr>
             <th>Date</th>
@@ -166,12 +166,12 @@ watch(periode, load);
         </thead>
         <tbody>
           <tr v-for="p in pointages" :key="p.id">
-            <td>{{ p.date }}</td>
-            <td>{{ p.employeNom }}</td>
-            <td>{{ p.heureArrivee }}</td>
-            <td>{{ p.heureDepart }}</td>
-            <td class="num">{{ p.heures }}</td>
-            <td><button class="btn danger" @click="supprimer(p)">Supprimer</button></td>
+            <td data-label="Date">{{ p.date }}</td>
+            <td data-label="Employé">{{ p.employeNom }}</td>
+            <td data-label="Arrivée">{{ p.heureArrivee }}</td>
+            <td data-label="Départ">{{ p.heureDepart }}</td>
+            <td class="num" data-label="Heures">{{ p.heures }}</td>
+            <td data-label=""><button class="btn danger" @click="supprimer(p)">Supprimer</button></td>
           </tr>
         </tbody>
       </table>

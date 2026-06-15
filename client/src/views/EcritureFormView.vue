@@ -131,7 +131,7 @@ watch(activeSociete, loadRefs, { immediate: true });
         </label>
       </div>
 
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Compte</th>
@@ -143,28 +143,28 @@ watch(activeSociete, loadRefs, { immediate: true });
         </thead>
         <tbody>
           <tr v-for="(ligne, i) in lignes" :key="i">
-            <td>
+            <td data-label="Compte">
               <input v-model="ligne.compte" list="comptes-list" placeholder="numéro de compte" />
             </td>
-            <td>
+            <td data-label="Libellé ligne">
               <input v-model="ligne.libelle" type="text" placeholder="libellé (optionnel)" />
             </td>
-            <td class="num">
+            <td class="num" data-label="Débit">
               <input v-model="ligne.debit" type="number" step="0.01" min="0" placeholder="0.00" />
             </td>
-            <td class="num">
+            <td class="num" data-label="Crédit">
               <input v-model="ligne.credit" type="number" step="0.01" min="0" placeholder="0.00" />
             </td>
-            <td>
-              <button type="button" class="btn danger" @click="supprimerLigne(i)" :disabled="lignes.length <= 2">✕</button>
+            <td data-label="">
+              <button type="button" class="btn danger" @click="supprimerLigne(i)" :disabled="lignes.length <= 2">✕ Supprimer la ligne</button>
             </td>
           </tr>
         </tbody>
         <tfoot>
           <tr>
             <th colspan="2">Totaux</th>
-            <th class="num">{{ totalDebit.toLocaleString('fr-FR') }}</th>
-            <th class="num">{{ totalCredit.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Débit">{{ totalDebit.toLocaleString('fr-FR') }}</th>
+            <th class="num" data-label="Crédit">{{ totalCredit.toLocaleString('fr-FR') }}</th>
             <th></th>
           </tr>
         </tfoot>

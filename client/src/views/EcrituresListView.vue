@@ -90,7 +90,7 @@ watch(activeSociete, () => {
 
     <div class="card">
       <p v-if="loading" class="muted">Chargement...</p>
-      <table v-else-if="ecritures.length">
+      <table v-else-if="ecritures.length" class="table-cards">
         <thead>
           <tr>
             <th>Date</th>
@@ -105,17 +105,17 @@ watch(activeSociete, () => {
         <tbody>
           <template v-for="ec in ecritures" :key="ec.id">
             <tr style="cursor: pointer;" @click="toggle(ec.id)">
-              <td>{{ ec.date }}</td>
-              <td>{{ ec.journalCode }}</td>
-              <td>{{ ec.numero }}</td>
-              <td>{{ ec.libelle }}</td>
-              <td class="num">{{ ec.totalDebit.toLocaleString('fr-FR') }}</td>
-              <td class="num">{{ ec.totalCredit.toLocaleString('fr-FR') }}</td>
+              <td data-label="Date">{{ ec.date }}</td>
+              <td data-label="Journal">{{ ec.journalCode }}</td>
+              <td data-label="N°">{{ ec.numero }}</td>
+              <td data-label="Libellé">{{ ec.libelle }}</td>
+              <td class="num" data-label="Débit">{{ ec.totalDebit.toLocaleString('fr-FR') }}</td>
+              <td class="num" data-label="Crédit">{{ ec.totalCredit.toLocaleString('fr-FR') }}</td>
               <td><button class="btn danger" @click.stop="supprimer(ec)">Supprimer</button></td>
             </tr>
             <tr v-if="expanded.has(ec.id)">
               <td colspan="7" style="background: #f9fafb;">
-                <table>
+                <table class="table-cards">
                   <thead>
                     <tr>
                       <th>Compte</th>
@@ -126,10 +126,10 @@ watch(activeSociete, () => {
                   </thead>
                   <tbody>
                     <tr v-for="(l, i) in ec.lignes" :key="i">
-                      <td>{{ l.compte }}</td>
-                      <td>{{ l.libelle }}</td>
-                      <td class="num">{{ l.debit ? l.debit.toLocaleString('fr-FR') : '' }}</td>
-                      <td class="num">{{ l.credit ? l.credit.toLocaleString('fr-FR') : '' }}</td>
+                      <td data-label="Compte">{{ l.compte }}</td>
+                      <td data-label="Libellé">{{ l.libelle }}</td>
+                      <td class="num" data-label="Débit">{{ l.debit ? l.debit.toLocaleString('fr-FR') : '' }}</td>
+                      <td class="num" data-label="Crédit">{{ l.credit ? l.credit.toLocaleString('fr-FR') : '' }}</td>
                     </tr>
                   </tbody>
                 </table>

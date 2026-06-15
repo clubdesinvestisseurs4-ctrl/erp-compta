@@ -72,7 +72,7 @@ onMounted(load);
           <p v-if="employe?.poste"><strong>Poste :</strong> {{ employe.poste }}</p>
         </div>
 
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>Désignation</th>
@@ -83,16 +83,16 @@ onMounted(load);
           </thead>
           <tbody>
             <tr>
-              <td>Salaire de base</td>
-              <td class="num">{{ fiche.heures }}</td>
-              <td class="num">{{ fiche.tauxHoraire.toLocaleString('fr-FR') }}</td>
-              <td class="num">{{ fiche.salaire.toLocaleString('fr-FR') }}</td>
+              <td data-label="Désignation">Salaire de base</td>
+              <td class="num" data-label="Heures">{{ fiche.heures }}</td>
+              <td class="num" data-label="Taux horaire">{{ fiche.tauxHoraire.toLocaleString('fr-FR') }}</td>
+              <td class="num" data-label="Montant">{{ fiche.salaire.toLocaleString('fr-FR') }}</td>
             </tr>
           </tbody>
           <tfoot>
             <tr>
               <td colspan="3"><strong>Net à payer</strong></td>
-              <td class="num"><strong>{{ fiche.salaire.toLocaleString('fr-FR') }} {{ societe?.devise || '' }}</strong></td>
+              <td class="num" data-label="Montant"><strong>{{ fiche.salaire.toLocaleString('fr-FR') }} {{ societe?.devise || '' }}</strong></td>
             </tr>
           </tfoot>
         </table>

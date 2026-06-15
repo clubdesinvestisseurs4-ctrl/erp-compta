@@ -143,7 +143,7 @@ onMounted(() => {
     </div>
 
     <div class="card">
-      <table v-if="employes.length">
+      <table v-if="employes.length" class="table-cards">
         <thead>
           <tr>
             <th>Nom</th>
@@ -155,11 +155,11 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr v-for="e in employes" :key="e.id">
-            <td>{{ e.prenom }} {{ e.nom }}</td>
-            <td>{{ e.poste }}</td>
-            <td class="num">{{ e.tauxHoraire.toLocaleString('fr-FR') }}</td>
-            <td>{{ e.societesAccess.map(societeNom).join(', ') }}</td>
-            <td>
+            <td data-label="Nom">{{ e.prenom }} {{ e.nom }}</td>
+            <td data-label="Poste">{{ e.poste }}</td>
+            <td class="num" data-label="Taux horaire">{{ e.tauxHoraire.toLocaleString('fr-FR') }}</td>
+            <td data-label="Sociétés">{{ e.societesAccess.map(societeNom).join(', ') }}</td>
+            <td data-label="" class="actions-cell">
               <button class="btn secondary" @click="modifier(e)">Modifier</button>
               <button class="btn danger" @click="supprimer(e)">Désactiver</button>
             </td>

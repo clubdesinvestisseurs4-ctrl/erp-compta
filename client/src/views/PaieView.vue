@@ -106,7 +106,7 @@ watch(periode, load);
 
     <div class="card">
       <p v-if="loading" class="muted">Chargement...</p>
-      <table v-else-if="fiches.length">
+      <table v-else-if="fiches.length" class="table-cards">
         <thead>
           <tr>
             <th>Employé</th>
@@ -119,12 +119,12 @@ watch(periode, load);
         </thead>
         <tbody>
           <tr v-for="f in fiches" :key="f.id">
-            <td>{{ f.employeNom }}</td>
-            <td class="num">{{ f.heures }}</td>
-            <td class="num">{{ f.tauxHoraire.toLocaleString('fr-FR') }}</td>
-            <td class="num">{{ f.salaire.toLocaleString('fr-FR') }}</td>
-            <td>{{ f.statut }}</td>
-            <td>
+            <td data-label="Employé">{{ f.employeNom }}</td>
+            <td class="num" data-label="Heures">{{ f.heures }}</td>
+            <td class="num" data-label="Taux horaire">{{ f.tauxHoraire.toLocaleString('fr-FR') }}</td>
+            <td class="num" data-label="Salaire">{{ f.salaire.toLocaleString('fr-FR') }}</td>
+            <td data-label="Statut">{{ f.statut }}</td>
+            <td data-label="" class="actions-cell">
               <RouterLink class="btn secondary" :to="`/paie/${f.id}/bulletin`">Bulletin</RouterLink>
               <button v-if="f.statut === 'brouillon'" class="btn" @click="valider(f)">Valider</button>
               <button v-if="f.statut === 'validee'" class="btn" @click="payer(f)">Marquer payée</button>

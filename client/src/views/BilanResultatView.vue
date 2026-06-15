@@ -63,26 +63,26 @@ watch(activeSociete, () => {
         <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 280px;">
             <h3>Actif</h3>
-            <table>
+            <table class="table-cards">
               <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Montant</th></tr></thead>
               <tbody>
                 <tr v-for="l in bilan.actif" :key="l.numero">
-                  <td>{{ l.numero }}</td><td>{{ l.libelle }}</td><td class="num">{{ l.montant.toLocaleString('fr-FR') }}</td>
+                  <td data-label="Compte">{{ l.numero }}</td><td data-label="Libellé">{{ l.libelle }}</td><td class="num" data-label="Montant">{{ l.montant.toLocaleString('fr-FR') }}</td>
                 </tr>
               </tbody>
-              <tfoot><tr><th colspan="2">Total Actif</th><th class="num">{{ bilan.totalActif.toLocaleString('fr-FR') }}</th></tr></tfoot>
+              <tfoot><tr><th colspan="2">Total Actif</th><th class="num" data-label="Montant">{{ bilan.totalActif.toLocaleString('fr-FR') }}</th></tr></tfoot>
             </table>
           </div>
           <div style="flex: 1; min-width: 280px;">
             <h3>Passif</h3>
-            <table>
+            <table class="table-cards">
               <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Montant</th></tr></thead>
               <tbody>
                 <tr v-for="l in bilan.passif" :key="l.numero">
-                  <td>{{ l.numero }}</td><td>{{ l.libelle }}</td><td class="num">{{ l.montant.toLocaleString('fr-FR') }}</td>
+                  <td data-label="Compte">{{ l.numero }}</td><td data-label="Libellé">{{ l.libelle }}</td><td class="num" data-label="Montant">{{ l.montant.toLocaleString('fr-FR') }}</td>
                 </tr>
               </tbody>
-              <tfoot><tr><th colspan="2">Total Passif</th><th class="num">{{ bilan.totalPassif.toLocaleString('fr-FR') }}</th></tr></tfoot>
+              <tfoot><tr><th colspan="2">Total Passif</th><th class="num" data-label="Montant">{{ bilan.totalPassif.toLocaleString('fr-FR') }}</th></tr></tfoot>
             </table>
           </div>
         </div>
@@ -93,26 +93,26 @@ watch(activeSociete, () => {
         <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 280px;">
             <h3>Charges</h3>
-            <table>
+            <table class="table-cards">
               <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Montant</th></tr></thead>
               <tbody>
                 <tr v-for="l in resultat.charges" :key="l.numero">
-                  <td>{{ l.numero }}</td><td>{{ l.libelle }}</td><td class="num">{{ l.montant.toLocaleString('fr-FR') }}</td>
+                  <td data-label="Compte">{{ l.numero }}</td><td data-label="Libellé">{{ l.libelle }}</td><td class="num" data-label="Montant">{{ l.montant.toLocaleString('fr-FR') }}</td>
                 </tr>
               </tbody>
-              <tfoot><tr><th colspan="2">Total Charges</th><th class="num">{{ resultat.totalCharges.toLocaleString('fr-FR') }}</th></tr></tfoot>
+              <tfoot><tr><th colspan="2">Total Charges</th><th class="num" data-label="Montant">{{ resultat.totalCharges.toLocaleString('fr-FR') }}</th></tr></tfoot>
             </table>
           </div>
           <div style="flex: 1; min-width: 280px;">
             <h3>Produits</h3>
-            <table>
+            <table class="table-cards">
               <thead><tr><th>Compte</th><th>Libellé</th><th class="num">Montant</th></tr></thead>
               <tbody>
                 <tr v-for="l in resultat.produits" :key="l.numero">
-                  <td>{{ l.numero }}</td><td>{{ l.libelle }}</td><td class="num">{{ l.montant.toLocaleString('fr-FR') }}</td>
+                  <td data-label="Compte">{{ l.numero }}</td><td data-label="Libellé">{{ l.libelle }}</td><td class="num" data-label="Montant">{{ l.montant.toLocaleString('fr-FR') }}</td>
                 </tr>
               </tbody>
-              <tfoot><tr><th colspan="2">Total Produits</th><th class="num">{{ resultat.totalProduits.toLocaleString('fr-FR') }}</th></tr></tfoot>
+              <tfoot><tr><th colspan="2">Total Produits</th><th class="num" data-label="Montant">{{ resultat.totalProduits.toLocaleString('fr-FR') }}</th></tr></tfoot>
             </table>
           </div>
         </div>

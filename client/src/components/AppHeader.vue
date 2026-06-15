@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useSocieteStore } from '../stores/societe';
@@ -9,12 +9,22 @@ const auth = useAuthStore();
 const societeStore = useSocieteStore();
 
 const societes = computed(() => societeStore.societes);
+const menuOpen = ref(false);
 
 function onSocieteChange(e) {
   societeStore.setActiveSociete(e.target.value);
 }
 
+function toggleMenu() {
+  menuOpen.value = !menuOpen.value;
+}
+
+function closeMenu() {
+  menuOpen.value = false;
+}
+
 function logout() {
+  closeMenu();
   auth.logout();
   societeStore.reset();
   router.push({ name: 'login' });
@@ -22,17 +32,20 @@ function logout() {
 </script>
 
 <template>
-  <header class="app-sidebar">
-    <div class="brand">
-      <span class="brand-icon">EC</span>
-      <span>ERP Compta</span>
+  <header class="app-sidebar" :class="{ 'menu-open': menuOpen }">
+    <div class="brand-row">
+      <div class="brand">
+        <span class="brand-icon">EC</span>
+        <span>ERP Compta</span>
+      </div>
+      <button class="menu-toggle" type="button" @click="toggleMenu" aria-label="Menu">☰</button>
     </div>
 
     <select v-if="societes.length" class="societe-select" :value="societeStore.activeSocieteId" @change="onSocieteChange">
       <option v-for="s in societes" :key="s.id" :value="s.id">{{ s.nom }}</option>
     </select>
 
-    <nav class="nav-links">
+    <nav class="nav-links" @click="closeMenu">
       <RouterLink to="/">Tableau de bord</RouterLink>
       <RouterLink to="/plan-comptable">Plan comptable</RouterLink>
       <RouterLink to="/journaux">Journaux</RouterLink>
@@ -68,6 +81,12 @@ function logout() {
   padding: 0.9rem 1rem;
 }
 
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -82,6 +101,17 @@ function logout() {
   border-radius: 4px;
   padding: 0.1rem 0.4rem;
   font-size: 0.8rem;
+}
+
+.menu-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--color-primary-light);
+  color: #fff;
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-size: 1.1rem;
+  cursor: pointer;
 }
 
 .societe-select {
@@ -132,17 +162,36 @@ function logout() {
     width: 100%;
     min-height: auto;
     flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .societe-select,
+  .nav-links,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .app-sidebar.menu-open .societe-select {
+    display: block;
+  }
+
+  .app-sidebar.menu-open .nav-links,
+  .app-sidebar.menu-open .sidebar-footer {
+    display: flex;
   }
 
   .nav-links {
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
     overflow-y: visible;
   }
 
   .nav-links a.router-link-active {
-    border-left: none;
-    border-bottom: 2px solid var(--color-accent);
+    border-left: 3px solid var(--color-accent);
+    border-bottom: none;
   }
 
   .sidebar-footer {

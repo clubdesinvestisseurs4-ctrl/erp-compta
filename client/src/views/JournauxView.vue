@@ -53,7 +53,7 @@ watch(activeSociete, load, { immediate: true });
     </div>
 
     <div class="card" v-if="journaux.length">
-      <table>
+      <table class="table-cards">
         <thead>
           <tr>
             <th>Code</th>
@@ -62,8 +62,8 @@ watch(activeSociete, load, { immediate: true });
         </thead>
         <tbody>
           <tr v-for="j in journaux" :key="j.code">
-            <td>{{ j.code }}</td>
-            <td>{{ j.libelle }}</td>
+            <td data-label="Code">{{ j.code }}</td>
+            <td data-label="Libellé">{{ j.libelle }}</td>
           </tr>
         </tbody>
       </table>
