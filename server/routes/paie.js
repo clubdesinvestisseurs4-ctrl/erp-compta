@@ -34,6 +34,32 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
   }
 });
 
+// GET /api/paie/:societeId/:id — détail d'une fiche de paie pour le bulletin
+router.get('/:societeId/:id', authenticateToken, requireSocieteAccess, async (req, res) => {
+  try {
+    const { societeId, id } = req.params;
+    const ref = db.collection('fiches_paie').doc(id);
+    const doc = await ref.get();
+    if (!doc.exists || doc.data().societeId !== societeId) {
+      return res.status(404).json({ error: 'Fiche de paie introuvable' });
+    }
+    const fiche = { id: doc.id, ...doc.data() };
+
+    const [employeDoc, societeDoc] = await Promise.all([
+      db.collection('employes').doc(fiche.employeId).get(),
+      db.collection('societes').doc(societeId).get(),
+    ]);
+
+    res.json({
+      fiche,
+      employe: employeDoc.exists ? employeDoc.data() : null,
+      societe: societeDoc.exists ? societeDoc.data() : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/paie/:societeId/generer — génère les fiches de paie de la période à partir des pointages
 router.post('/:societeId/generer', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {

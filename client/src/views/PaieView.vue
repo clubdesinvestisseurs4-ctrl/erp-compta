@@ -125,6 +125,7 @@ watch(periode, load);
             <td class="num">{{ f.salaire.toLocaleString('fr-FR') }}</td>
             <td>{{ f.statut }}</td>
             <td>
+              <RouterLink class="btn secondary" :to="`/paie/${f.id}/bulletin`">Bulletin</RouterLink>
               <button v-if="f.statut === 'brouillon'" class="btn" @click="valider(f)">Valider</button>
               <button v-if="f.statut === 'validee'" class="btn" @click="payer(f)">Marquer payée</button>
               <button v-if="f.statut === 'brouillon'" class="btn danger" @click="supprimer(f)">Supprimer</button>

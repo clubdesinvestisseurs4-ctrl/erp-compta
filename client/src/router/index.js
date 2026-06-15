@@ -15,6 +15,7 @@ const routes = [
   { path: '/employes', name: 'employes', component: () => import('../views/EmployesView.vue'), meta: { adminOnly: true } },
   { path: '/pointages', name: 'pointages', component: () => import('../views/PointagesView.vue') },
   { path: '/paie', name: 'paie', component: () => import('../views/PaieView.vue') },
+  { path: '/paie/:id/bulletin', name: 'paie-bulletin', component: () => import('../views/BulletinPaieView.vue') },
   { path: '/tiers', name: 'tiers', component: () => import('../views/TiersView.vue') },
   { path: '/balance-auxiliaire', name: 'balance-auxiliaire', component: () => import('../views/BalanceAuxiliaireView.vue') },
 ];
