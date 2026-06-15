@@ -49,6 +49,10 @@ app.use('/api/comptes',  require('./routes/comptes'));
 app.use('/api/journaux', require('./routes/journaux'));
 app.use('/api/ecritures', require('./routes/ecritures'));
 app.use('/api/rapports', require('./routes/rapports'));
+app.use('/api/employes', require('./routes/employes'));
+app.use('/api/pointages', require('./routes/pointages'));
+app.use('/api/paie', require('./routes/paie'));
+app.use('/api/tiers', require('./routes/tiers'));
 
 // Health check (utile pour Render)
 app.get('/health', (_req, res) => {

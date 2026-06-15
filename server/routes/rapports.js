@@ -228,4 +228,58 @@ router.get('/:societeId/resultat', authenticateToken, requireSocieteAccess, asyn
   }
 });
 
+// GET /api/rapports/:societeId/balance-auxiliaire?type=client|fournisseur&exercice=YYYY
+router.get('/:societeId/balance-auxiliaire', authenticateToken, requireSocieteAccess, async (req, res) => {
+  try {
+    const { societeId } = req.params;
+    const { type, exercice } = req.query;
+
+    if (!type || !['client', 'fournisseur'].includes(type)) {
+      return res.status(400).json({ error: 'type doit être "client" ou "fournisseur"' });
+    }
+    if (!exercice) {
+      return res.status(400).json({ error: 'exercice requis' });
+    }
+
+    const [ecritures, tiersSnap] = await Promise.all([
+      getEcritures(societeId, exercice),
+      db.collection('tiers').where('societeId', '==', societeId).where('type', '==', type).get(),
+    ]);
+
+    const tiersList = tiersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const totaux = new Map(); // compteNumero -> { totalDebit, totalCredit }
+    for (const ec of ecritures) {
+      for (const ligne of ec.lignes) {
+        const t = totaux.get(ligne.compte) || { totalDebit: 0, totalCredit: 0 };
+        t.totalDebit = round2(t.totalDebit + ligne.debit);
+        t.totalCredit = round2(t.totalCredit + ligne.credit);
+        totaux.set(ligne.compte, t);
+      }
+    }
+
+    const lignes = tiersList.map(t => {
+      const total = totaux.get(t.compteNumero) || { totalDebit: 0, totalCredit: 0 };
+      return {
+        id: t.id,
+        nom: t.nom,
+        compteNumero: t.compteNumero,
+        totalDebit: total.totalDebit,
+        totalCredit: total.totalCredit,
+        solde: round2(total.totalDebit - total.totalCredit),
+      };
+    }).sort((a, b) => a.nom.localeCompare(b.nom));
+
+    const totauxGlobaux = lignes.reduce((acc, l) => ({
+      totalDebit: round2(acc.totalDebit + l.totalDebit),
+      totalCredit: round2(acc.totalCredit + l.totalCredit),
+      solde: round2(acc.solde + l.solde),
+    }), { totalDebit: 0, totalCredit: 0, solde: 0 });
+
+    res.json({ lignes, totaux: totauxGlobaux });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

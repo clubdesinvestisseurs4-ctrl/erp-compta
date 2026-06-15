@@ -12,6 +12,11 @@ const routes = [
   { path: '/grand-livre', name: 'grand-livre', component: () => import('../views/GrandLivreView.vue') },
   { path: '/balance', name: 'balance', component: () => import('../views/BalanceView.vue') },
   { path: '/bilan-resultat', name: 'bilan-resultat', component: () => import('../views/BilanResultatView.vue') },
+  { path: '/employes', name: 'employes', component: () => import('../views/EmployesView.vue'), meta: { adminOnly: true } },
+  { path: '/pointages', name: 'pointages', component: () => import('../views/PointagesView.vue') },
+  { path: '/paie', name: 'paie', component: () => import('../views/PaieView.vue') },
+  { path: '/tiers', name: 'tiers', component: () => import('../views/TiersView.vue') },
+  { path: '/balance-auxiliaire', name: 'balance-auxiliaire', component: () => import('../views/BalanceAuxiliaireView.vue') },
 ];
 
 const router = createRouter({

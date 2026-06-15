@@ -36,6 +36,11 @@ function logout() {
       <RouterLink to="/grand-livre">Grand livre</RouterLink>
       <RouterLink to="/balance">Balance</RouterLink>
       <RouterLink to="/bilan-resultat">Bilan / Résultat</RouterLink>
+      <RouterLink to="/tiers">Tiers</RouterLink>
+      <RouterLink to="/balance-auxiliaire">Balance auxiliaire</RouterLink>
+      <RouterLink to="/pointages">Pointages</RouterLink>
+      <RouterLink to="/paie">Paie</RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/employes">Personnel</RouterLink>
       <RouterLink v-if="auth.isAdmin" to="/societes">Sociétés</RouterLink>
     </nav>
 
