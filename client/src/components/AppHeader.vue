@@ -75,7 +75,10 @@ function logout() {
   gap: 0.75rem;
   width: 220px;
   flex-shrink: 0;
-  min-height: 100vh;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
   background: var(--color-primary);
   color: #fff;
   padding: 0.9rem 1rem;
@@ -160,7 +163,9 @@ function logout() {
 @media (max-width: 860px) {
   .app-sidebar {
     width: 100%;
-    min-height: auto;
+    height: auto;
+    max-height: 100vh;
+    overflow-y: auto;
     flex-direction: column;
     gap: 0.5rem;
   }
