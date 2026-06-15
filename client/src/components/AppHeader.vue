@@ -22,11 +22,15 @@ function logout() {
 </script>
 
 <template>
-  <header class="app-header">
+  <header class="app-sidebar">
     <div class="brand">
       <span class="brand-icon">EC</span>
       <span>ERP Compta</span>
     </div>
+
+    <select v-if="societes.length" class="societe-select" :value="societeStore.activeSocieteId" @change="onSocieteChange">
+      <option v-for="s in societes" :key="s.id" :value="s.id">{{ s.nom }}</option>
+    </select>
 
     <nav class="nav-links">
       <RouterLink to="/">Tableau de bord</RouterLink>
@@ -44,10 +48,7 @@ function logout() {
       <RouterLink v-if="auth.isAdmin" to="/societes">Sociétés</RouterLink>
     </nav>
 
-    <div class="header-right">
-      <select v-if="societes.length" :value="societeStore.activeSocieteId" @change="onSocieteChange">
-        <option v-for="s in societes" :key="s.id" :value="s.id">{{ s.nom }}</option>
-      </select>
+    <div class="sidebar-footer">
       <span class="muted">{{ auth.user?.nom }}</span>
       <button class="btn secondary" @click="logout">Déconnexion</button>
     </div>
@@ -55,14 +56,16 @@ function logout() {
 </template>
 
 <style scoped>
-.app-header {
+.app-sidebar {
   display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 220px;
+  flex-shrink: 0;
+  min-height: 100vh;
   background: var(--color-primary);
   color: #fff;
-  padding: 0.6rem 1.25rem;
+  padding: 0.9rem 1rem;
 }
 
 .brand {
@@ -81,31 +84,71 @@ function logout() {
   font-size: 0.8rem;
 }
 
+.societe-select {
+  width: 100%;
+}
+
 .nav-links {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.9rem;
+  flex-direction: column;
+  gap: 0.2rem;
   flex: 1;
+  overflow-y: auto;
 }
 
 .nav-links a {
   color: #dce6f0;
   font-size: 0.9rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  border-left: 3px solid transparent;
+}
+
+.nav-links a:hover {
+  background: var(--color-primary-light);
 }
 
 .nav-links a.router-link-active {
   color: #fff;
   font-weight: 600;
-  border-bottom: 2px solid var(--color-accent);
+  background: var(--color-primary-light);
+  border-left: 3px solid var(--color-accent);
 }
 
-.header-right {
+.sidebar-footer {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-primary-light);
 }
 
-.header-right .muted {
+.sidebar-footer .muted {
   color: #cfd9e3;
+}
+
+@media (max-width: 860px) {
+  .app-sidebar {
+    width: 100%;
+    min-height: auto;
+    flex-direction: column;
+  }
+
+  .nav-links {
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-y: visible;
+  }
+
+  .nav-links a.router-link-active {
+    border-left: none;
+    border-bottom: 2px solid var(--color-accent);
+  }
+
+  .sidebar-footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 </style>

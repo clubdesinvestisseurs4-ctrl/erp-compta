@@ -21,7 +21,7 @@ watch(() => auth.isAuthenticated, (isAuth) => {
 </script>
 
 <template>
-  <div class="layout-vertical">
+  <div class="layout-vertical" :class="{ 'with-sidebar': auth.isAuthenticated }">
     <AppHeader v-if="auth.isAuthenticated" />
     <main class="content">
       <RouterView />
@@ -34,5 +34,15 @@ watch(() => auth.isAuthenticated, (isAuth) => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+}
+
+.layout-vertical.with-sidebar {
+  flex-direction: row;
+}
+
+@media (max-width: 860px) {
+  .layout-vertical.with-sidebar {
+    flex-direction: column;
+  }
 }
 </style>
