@@ -18,6 +18,8 @@ const form = ref({
   societesAccess: [],
 });
 
+const editingId = ref(null);
+
 async function load() {
   error.value = '';
   try {
@@ -27,7 +29,25 @@ async function load() {
   }
 }
 
-async function ajouter() {
+function resetForm() {
+  form.value = { nom: '', prenom: '', poste: '', tauxHoraire: '', societesAccess: [] };
+  editingId.value = null;
+}
+
+function modifier(employe) {
+  form.value = {
+    nom: employe.nom,
+    prenom: employe.prenom,
+    poste: employe.poste || '',
+    tauxHoraire: employe.tauxHoraire,
+    societesAccess: [...employe.societesAccess],
+  };
+  editingId.value = employe.id;
+  success.value = '';
+  error.value = '';
+}
+
+async function enregistrer() {
   error.value = '';
   success.value = '';
 
@@ -36,17 +56,24 @@ async function ajouter() {
     return;
   }
 
+  const payload = {
+    nom: form.value.nom,
+    prenom: form.value.prenom,
+    poste: form.value.poste,
+    tauxHoraire: Number(form.value.tauxHoraire),
+    societesAccess: form.value.societesAccess,
+  };
+
   saving.value = true;
   try {
-    await api.post('/api/employes', {
-      nom: form.value.nom,
-      prenom: form.value.prenom,
-      poste: form.value.poste,
-      tauxHoraire: Number(form.value.tauxHoraire),
-      societesAccess: form.value.societesAccess,
-    });
-    success.value = 'Employé créé.';
-    form.value = { nom: '', prenom: '', poste: '', tauxHoraire: '', societesAccess: [] };
+    if (editingId.value) {
+      await api.put(`/api/employes/${editingId.value}`, payload);
+      success.value = 'Employé mis à jour.';
+    } else {
+      await api.post('/api/employes', payload);
+      success.value = 'Employé créé.';
+    }
+    resetForm();
     await load();
   } catch (err) {
     error.value = err.message;
@@ -84,7 +111,7 @@ onMounted(() => {
     <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card">
-      <h2>Nouvel employé</h2>
+      <h2>{{ editingId ? 'Modifier l\'employé' : 'Nouvel employé' }}</h2>
       <div class="form-row">
         <label>
           Nom
@@ -110,7 +137,8 @@ onMounted(() => {
         </label>
       </div>
       <div class="form-row">
-        <button class="btn" :disabled="saving" @click="ajouter">Ajouter</button>
+        <button class="btn" :disabled="saving" @click="enregistrer">{{ editingId ? 'Enregistrer' : 'Ajouter' }}</button>
+        <button v-if="editingId" class="btn secondary" :disabled="saving" @click="resetForm">Annuler</button>
       </div>
     </div>
 
@@ -131,7 +159,10 @@ onMounted(() => {
             <td>{{ e.poste }}</td>
             <td class="num">{{ e.tauxHoraire.toLocaleString('fr-FR') }}</td>
             <td>{{ e.societesAccess.map(societeNom).join(', ') }}</td>
-            <td><button class="btn danger" @click="supprimer(e)">Désactiver</button></td>
+            <td>
+              <button class="btn secondary" @click="modifier(e)">Modifier</button>
+              <button class="btn danger" @click="supprimer(e)">Désactiver</button>
+            </td>
           </tr>
         </tbody>
       </table>

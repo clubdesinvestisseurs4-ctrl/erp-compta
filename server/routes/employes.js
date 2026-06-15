@@ -74,18 +74,13 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
   }
 });
 
-// DELETE /api/employes/:id — désactive un employé (admin), refusé si des fiches de paie existent
+// DELETE /api/employes/:id — désactive un employé (admin)
 router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const ref = db.collection('employes').doc(req.params.id);
     const doc = await ref.get();
     if (!doc.exists) {
       return res.status(404).json({ error: 'Employé introuvable' });
-    }
-
-    const fiches = await db.collection('fiches_paie').where('employeId', '==', req.params.id).limit(1).get();
-    if (!fiches.empty) {
-      return res.status(409).json({ error: 'Impossible de supprimer : des fiches de paie existent pour cet employé' });
     }
 
     await ref.update({ actif: false });
