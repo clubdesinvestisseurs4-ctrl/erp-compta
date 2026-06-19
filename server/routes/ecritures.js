@@ -2,7 +2,7 @@ const express = require('express');
 const { db } = require('../firebase-admin');
 const { authenticateToken } = require('../middleware/auth');
 const { requireSocieteAccess } = require('../middleware/societe');
-const { round2, validateLignes, checkComptesExist, createEcriture } = require('../utils/ecritures');
+const { createEcriture, isExerciceClos } = require('../utils/ecritures');
 
 const router = express.Router({ mergeParams: true });
 
@@ -64,11 +64,16 @@ router.post('/:societeId', authenticateToken, requireSocieteAccess, async (req, 
   }
 });
 
-// PUT /api/ecritures/:societeId/:id — modification (libellé et lignes, pas le numéro/journal)
+// PUT /api/ecritures/:societeId/:id — modification du libellé uniquement (une écriture comptabilisée
+// ne se corrige jamais sur ses lignes/montants : voir POST /:id/extourner pour annuler son effet).
 router.put('/:societeId/:id', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId, id } = req.params;
-    const { date, libelle, lignes } = req.body;
+    const { libelle } = req.body;
+
+    if (!libelle) {
+      return res.status(400).json({ error: 'libelle requis' });
+    }
 
     const ref = db.collection('ecritures').doc(id);
     const doc = await ref.get();
@@ -76,54 +81,63 @@ router.put('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
       return res.status(404).json({ error: 'Écriture introuvable' });
     }
 
-    const erreur = validateLignes(lignes);
-    if (erreur) {
-      return res.status(400).json({ error: erreur });
+    if (await isExerciceClos(societeId, doc.data().exercice)) {
+      return res.status(409).json({ error: `L'exercice ${doc.data().exercice} est clôturé : cette écriture est verrouillée` });
     }
 
-    const inconnus = await checkComptesExist(societeId, lignes);
-    if (inconnus.length > 0) {
-      return res.status(400).json({ error: `Comptes inconnus dans le plan comptable : ${inconnus.join(', ')}` });
-    }
-
-    const totalDebit = round2(lignes.reduce((s, l) => s + (Number(l.debit) || 0), 0));
-    const totalCredit = round2(lignes.reduce((s, l) => s + (Number(l.credit) || 0), 0));
-
-    const update = {
-      libelle: libelle ?? doc.data().libelle,
-      date: date ?? doc.data().date,
-      lignes: lignes.map(l => ({
-        compte: String(l.compte),
-        libelle: l.libelle || '',
-        debit: round2(l.debit || 0),
-        credit: round2(l.credit || 0),
-      })),
-      totalDebit,
-      totalCredit,
-      updatedBy: req.user.username,
-      updatedAt: new Date().toISOString(),
-    };
-
-    await ref.update(update);
-    res.json({ message: 'Écriture mise à jour' });
+    await ref.update({ libelle, updatedBy: req.user.username, updatedAt: new Date().toISOString() });
+    res.json({ message: 'Libellé mis à jour' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /api/ecritures/:societeId/:id
-router.delete('/:societeId/:id', authenticateToken, requireSocieteAccess, async (req, res) => {
+// POST /api/ecritures/:societeId/:id/extourner — contre-passation : crée une écriture miroir
+// (débit/crédit inversés) et marque l'originale comme extournée. Seul moyen d'annuler une écriture.
+router.post('/:societeId/:id/extourner', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId, id } = req.params;
+    const { date, journalCode } = req.body;
+
     const ref = db.collection('ecritures').doc(id);
     const doc = await ref.get();
     if (!doc.exists || doc.data().societeId !== societeId) {
       return res.status(404).json({ error: 'Écriture introuvable' });
     }
-    await ref.delete();
-    res.json({ message: 'Écriture supprimée' });
+    const originale = doc.data();
+
+    if (originale.extourneeParId) {
+      return res.status(409).json({ error: 'Cette écriture a déjà été extournée' });
+    }
+
+    const dateExtourne = date || new Date().toISOString().slice(0, 10);
+    const exerciceExtourne = Number(dateExtourne.slice(0, 4));
+
+    let ecriture;
+    try {
+      ecriture = await createEcriture({
+        societeId,
+        journalCode: journalCode || originale.journalCode,
+        date: dateExtourne,
+        libelle: `Extourne ${originale.journalCode}-${originale.numero} - ${originale.libelle}`,
+        exercice: exerciceExtourne,
+        createdBy: req.user.username,
+        lignes: originale.lignes.map(l => ({
+          compte: l.compte,
+          libelle: l.libelle || originale.libelle,
+          debit: l.credit,
+          credit: l.debit,
+        })),
+      });
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    await ref.update({ extourneeParId: ecriture.id, extourneeLe: new Date().toISOString() });
+    res.json({ message: 'Écriture extournée', ecritureId: ecriture.id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Extourner ecriture error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

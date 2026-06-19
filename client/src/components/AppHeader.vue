@@ -56,10 +56,12 @@ function logout() {
       <RouterLink to="/tiers">Tiers</RouterLink>
       <RouterLink to="/commandes">Bons de commande</RouterLink>
       <RouterLink to="/balance-auxiliaire">Balance auxiliaire</RouterLink>
+      <RouterLink to="/declaration-tva">Déclaration TVA</RouterLink>
       <RouterLink to="/pointages">Pointages</RouterLink>
       <RouterLink to="/paie">Paie</RouterLink>
       <RouterLink v-if="auth.isAdmin" to="/employes">Personnel</RouterLink>
       <RouterLink v-if="auth.isAdmin" to="/societes">Sociétés</RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/cloture-exercice">Clôture d'exercice</RouterLink>
     </nav>
 
     <div class="sidebar-footer">

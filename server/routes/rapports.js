@@ -282,4 +282,49 @@ router.get('/:societeId/balance-auxiliaire', authenticateToken, requireSocieteAc
   }
 });
 
+// GET /api/rapports/:societeId/declaration-tva?dateDebut=YYYY-MM-DD&dateFin=YYYY-MM-DD
+// TVA collectée (compte 4431) - TVA déductible (comptes 4452/4454/4456) sur une période.
+router.get('/:societeId/declaration-tva', authenticateToken, requireSocieteAccess, async (req, res) => {
+  try {
+    const { societeId } = req.params;
+    const { dateDebut, dateFin } = req.query;
+    if (!dateDebut || !dateFin) {
+      return res.status(400).json({ error: 'dateDebut et dateFin sont requis' });
+    }
+
+    const snap = await db.collection('ecritures').where('societeId', '==', societeId).get();
+
+    const COMPTES_COLLECTEE = ['443', '4431'];
+    const COMPTES_DEDUCTIBLE = ['4452', '4454', '4456'];
+
+    let tvaCollectee = 0;
+    let tvaDeductible = 0;
+
+    for (const doc of snap.docs) {
+      const ec = doc.data();
+      if (ec.date < dateDebut || ec.date > dateFin) continue;
+      for (const ligne of ec.lignes) {
+        if (COMPTES_COLLECTEE.includes(ligne.compte)) {
+          tvaCollectee = round2(tvaCollectee + ligne.credit - ligne.debit);
+        } else if (COMPTES_DEDUCTIBLE.includes(ligne.compte)) {
+          tvaDeductible = round2(tvaDeductible + ligne.debit - ligne.credit);
+        }
+      }
+    }
+
+    const tvaNette = round2(tvaCollectee - tvaDeductible);
+
+    res.json({
+      dateDebut,
+      dateFin,
+      tvaCollectee,
+      tvaDeductible,
+      tvaNette,
+      sens: tvaNette >= 0 ? 'a_payer' : 'credit_a_reporter',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

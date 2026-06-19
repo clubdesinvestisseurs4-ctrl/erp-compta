@@ -54,6 +54,7 @@ app.use('/api/pointages', require('./routes/pointages'));
 app.use('/api/paie', require('./routes/paie'));
 app.use('/api/tiers', require('./routes/tiers'));
 app.use('/api/commandes', require('./routes/commandes'));
+app.use('/api/cloture', require('./routes/cloture'));
 
 // Health check (utile pour Render)
 app.get('/health', (_req, res) => {

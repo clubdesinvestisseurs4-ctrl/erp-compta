@@ -45,11 +45,11 @@ function toggle(id) {
   expanded.value = new Set(expanded.value);
 }
 
-async function supprimer(ecriture) {
-  if (!confirm(`Supprimer l'écriture ${ecriture.journalCode}-${ecriture.numero} ?`)) return;
+async function extourner(ecriture) {
+  if (!confirm(`Extourner (annuler) l'écriture ${ecriture.journalCode}-${ecriture.numero} ? Une écriture inverse sera générée.`)) return;
   error.value = '';
   try {
-    await api.delete(`/api/ecritures/${activeSociete.value.id}/${ecriture.id}`);
+    await api.post(`/api/ecritures/${activeSociete.value.id}/${ecriture.id}/extourner`);
     await load();
   } catch (err) {
     error.value = err.message;
@@ -108,10 +108,12 @@ watch(activeSociete, () => {
               <td data-label="Date">{{ ec.date }}</td>
               <td data-label="Journal">{{ ec.journalCode }}</td>
               <td data-label="N°">{{ ec.numero }}</td>
-              <td data-label="Libellé">{{ ec.libelle }}</td>
+              <td data-label="Libellé">{{ ec.libelle }} <span v-if="ec.extourneeParId" class="muted">(extournée)</span></td>
               <td class="num" data-label="Débit">{{ ec.totalDebit.toLocaleString('fr-FR') }}</td>
               <td class="num" data-label="Crédit">{{ ec.totalCredit.toLocaleString('fr-FR') }}</td>
-              <td><button class="btn danger" @click.stop="supprimer(ec)">Supprimer</button></td>
+              <td>
+                <button v-if="!ec.extourneeParId" class="btn danger" @click.stop="extourner(ec)">Extourner</button>
+              </td>
             </tr>
             <tr v-if="expanded.has(ec.id)">
               <td colspan="7" style="background: #f9fafb;">

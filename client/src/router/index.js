@@ -19,6 +19,8 @@ const routes = [
   { path: '/tiers', name: 'tiers', component: () => import('../views/TiersView.vue') },
   { path: '/commandes', name: 'commandes', component: () => import('../views/CommandesView.vue') },
   { path: '/balance-auxiliaire', name: 'balance-auxiliaire', component: () => import('../views/BalanceAuxiliaireView.vue') },
+  { path: '/declaration-tva', name: 'declaration-tva', component: () => import('../views/DeclarationTvaView.vue') },
+  { path: '/cloture-exercice', name: 'cloture-exercice', component: () => import('../views/ClotureExerciceView.vue'), meta: { adminOnly: true } },
 ];
 
 const router = createRouter({

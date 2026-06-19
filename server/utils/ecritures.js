@@ -62,11 +62,22 @@ async function getNextNumero(societeId, journalCode, exercice) {
   });
 }
 
+// Indique si l'exercice est clôturé pour la société (aucune écriture ne peut plus y être ajoutée).
+async function isExerciceClos(societeId, exercice) {
+  const societeDoc = await db.collection('societes').doc(societeId).get();
+  const exercicesClotures = (societeDoc.exists && societeDoc.data().exercicesClotures) || [];
+  return exercicesClotures.includes(Number(exercice));
+}
+
 // Crée une écriture comptable validée et numérotée. Lance une erreur si la validation échoue.
 async function createEcriture({ societeId, journalCode, date, libelle, lignes, exercice, createdBy }) {
   const journalDoc = await db.collection('journaux').doc(`${societeId}_${journalCode}`).get();
   if (!journalDoc.exists) {
     throw new Error('Journal inconnu pour cette société');
+  }
+
+  if (await isExerciceClos(societeId, exercice)) {
+    throw new Error(`L'exercice ${exercice} est clôturé : aucune écriture ne peut y être ajoutée`);
   }
 
   const erreur = validateLignes(lignes);
@@ -113,4 +124,5 @@ module.exports = {
   checkComptesExist,
   getNextNumero,
   createEcriture,
+  isExerciceClos,
 };
