@@ -53,6 +53,8 @@ function logout() {
       <RouterLink to="/grand-livre">Grand livre</RouterLink>
       <RouterLink to="/balance">Balance</RouterLink>
       <RouterLink to="/bilan-resultat">Bilan / Résultat</RouterLink>
+      <RouterLink to="/esg">Soldes de gestion</RouterLink>
+      <RouterLink to="/flux-tresorerie">Flux de trésorerie</RouterLink>
       <RouterLink to="/tiers">Tiers</RouterLink>
       <RouterLink to="/commandes">Bons de commande</RouterLink>
       <RouterLink to="/factures">Factures de vente</RouterLink>
