@@ -50,6 +50,7 @@ function logout() {
       <RouterLink to="/plan-comptable">Plan comptable</RouterLink>
       <RouterLink to="/journaux">Journaux</RouterLink>
       <RouterLink to="/ecritures">Écritures</RouterLink>
+      <RouterLink to="/modeles-ecriture">Modèles récurrents</RouterLink>
       <RouterLink to="/grand-livre">Grand livre</RouterLink>
       <RouterLink to="/balance">Balance</RouterLink>
       <RouterLink to="/bilan-resultat">Bilan / Résultat</RouterLink>

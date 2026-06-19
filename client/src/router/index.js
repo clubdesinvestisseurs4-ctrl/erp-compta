@@ -9,6 +9,7 @@ const routes = [
   { path: '/journaux', name: 'journaux', component: () => import('../views/JournauxView.vue') },
   { path: '/ecritures', name: 'ecritures', component: () => import('../views/EcrituresListView.vue') },
   { path: '/ecritures/nouvelle', name: 'ecriture-nouvelle', component: () => import('../views/EcritureFormView.vue') },
+  { path: '/modeles-ecriture', name: 'modeles-ecriture', component: () => import('../views/ModelesEcritureView.vue') },
   { path: '/grand-livre', name: 'grand-livre', component: () => import('../views/GrandLivreView.vue') },
   { path: '/balance', name: 'balance', component: () => import('../views/BalanceView.vue') },
   { path: '/bilan-resultat', name: 'bilan-resultat', component: () => import('../views/BilanResultatView.vue') },

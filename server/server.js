@@ -59,6 +59,7 @@ app.use('/api/lettrage', require('./routes/lettrage'));
 app.use('/api/factures', require('./routes/factures'));
 app.use('/api/rapprochement', require('./routes/rapprochement'));
 app.use('/api/export', require('./routes/export'));
+app.use('/api/modeles', require('./routes/modeles'));
 
 // Health check (utile pour Render)
 app.get('/health', (_req, res) => {
