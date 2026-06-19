@@ -56,6 +56,7 @@ app.use('/api/tiers', require('./routes/tiers'));
 app.use('/api/commandes', require('./routes/commandes'));
 app.use('/api/cloture', require('./routes/cloture'));
 app.use('/api/lettrage', require('./routes/lettrage'));
+app.use('/api/factures', require('./routes/factures'));
 
 // Health check (utile pour Render)
 app.get('/health', (_req, res) => {
