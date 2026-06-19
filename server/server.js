@@ -53,6 +53,7 @@ app.use('/api/employes', require('./routes/employes'));
 app.use('/api/pointages', require('./routes/pointages'));
 app.use('/api/paie', require('./routes/paie'));
 app.use('/api/tiers', require('./routes/tiers'));
+app.use('/api/commandes', require('./routes/commandes'));
 
 // Health check (utile pour Render)
 app.get('/health', (_req, res) => {

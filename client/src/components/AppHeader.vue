@@ -54,6 +54,7 @@ function logout() {
       <RouterLink to="/balance">Balance</RouterLink>
       <RouterLink to="/bilan-resultat">Bilan / Résultat</RouterLink>
       <RouterLink to="/tiers">Tiers</RouterLink>
+      <RouterLink to="/commandes">Bons de commande</RouterLink>
       <RouterLink to="/balance-auxiliaire">Balance auxiliaire</RouterLink>
       <RouterLink to="/pointages">Pointages</RouterLink>
       <RouterLink to="/paie">Paie</RouterLink>

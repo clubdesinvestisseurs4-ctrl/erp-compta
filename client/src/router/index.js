@@ -17,6 +17,7 @@ const routes = [
   { path: '/paie', name: 'paie', component: () => import('../views/PaieView.vue') },
   { path: '/paie/:id/bulletin', name: 'paie-bulletin', component: () => import('../views/BulletinPaieView.vue') },
   { path: '/tiers', name: 'tiers', component: () => import('../views/TiersView.vue') },
+  { path: '/commandes', name: 'commandes', component: () => import('../views/CommandesView.vue') },
   { path: '/balance-auxiliaire', name: 'balance-auxiliaire', component: () => import('../views/BalanceAuxiliaireView.vue') },
 ];
 
