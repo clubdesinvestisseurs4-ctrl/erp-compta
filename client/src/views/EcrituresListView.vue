@@ -45,6 +45,18 @@ function toggle(id) {
   expanded.value = new Set(expanded.value);
 }
 
+async function exporterFec() {
+  error.value = '';
+  try {
+    await api.downloadFile(
+      `/api/export/${activeSociete.value.id}/fec?exercice=${filtreExercice.value}`,
+      `FEC_${activeSociete.value.id}_${filtreExercice.value}.txt`
+    );
+  } catch (err) {
+    error.value = err.message;
+  }
+}
+
 async function extourner(ecriture) {
   if (!confirm(`Extourner (annuler) l'écriture ${ecriture.journalCode}-${ecriture.numero} ? Une écriture inverse sera générée.`)) return;
   error.value = '';
@@ -85,6 +97,7 @@ watch(activeSociete, () => {
           <input v-model.number="filtreExercice" type="number" @change="load" />
         </label>
         <RouterLink to="/ecritures/nouvelle" class="btn">+ Nouvelle écriture</RouterLink>
+        <button class="btn secondary" @click="exporterFec">Exporter FEC</button>
       </div>
     </div>
 

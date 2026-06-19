@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { exportCsv } from '../utils/csv';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
@@ -23,6 +24,17 @@ async function load() {
   } finally {
     loading.value = false;
   }
+}
+
+function exporter() {
+  if (!result.value) return;
+  exportCsv(`balance_auxiliaire_${type.value}_${activeSociete.value.id}_${exercice.value}.csv`, result.value.lignes, [
+    { label: 'Compte', key: 'compteNumero' },
+    { label: 'Nom', key: 'nom' },
+    { label: 'Total débit', key: 'totalDebit' },
+    { label: 'Total crédit', key: 'totalCredit' },
+    { label: 'Solde', key: 'solde' },
+  ]);
 }
 
 watch(activeSociete, () => {
@@ -52,6 +64,7 @@ watch(type, load);
           Exercice
           <input v-model.number="exercice" type="number" @change="load" />
         </label>
+        <button class="btn secondary" :disabled="!result" @click="exporter">Exporter CSV</button>
       </div>
     </div>
 
