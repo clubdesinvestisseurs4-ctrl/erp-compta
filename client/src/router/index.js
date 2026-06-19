@@ -21,6 +21,7 @@ const routes = [
   { path: '/factures', name: 'factures', component: () => import('../views/FacturesVenteView.vue') },
   { path: '/balance-auxiliaire', name: 'balance-auxiliaire', component: () => import('../views/BalanceAuxiliaireView.vue') },
   { path: '/lettrage', name: 'lettrage', component: () => import('../views/LettrageView.vue') },
+  { path: '/rapprochement-bancaire', name: 'rapprochement-bancaire', component: () => import('../views/RapprochementBancaireView.vue') },
   { path: '/declaration-tva', name: 'declaration-tva', component: () => import('../views/DeclarationTvaView.vue') },
   { path: '/cloture-exercice', name: 'cloture-exercice', component: () => import('../views/ClotureExerciceView.vue'), meta: { adminOnly: true } },
 ];

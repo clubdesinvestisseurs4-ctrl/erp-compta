@@ -58,6 +58,7 @@ function logout() {
       <RouterLink to="/factures">Factures de vente</RouterLink>
       <RouterLink to="/balance-auxiliaire">Balance auxiliaire</RouterLink>
       <RouterLink to="/lettrage">Lettrage</RouterLink>
+      <RouterLink to="/rapprochement-bancaire">Rapprochement bancaire</RouterLink>
       <RouterLink to="/declaration-tva">Déclaration TVA</RouterLink>
       <RouterLink to="/pointages">Pointages</RouterLink>
       <RouterLink to="/paie">Paie</RouterLink>
