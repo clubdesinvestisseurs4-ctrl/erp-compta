@@ -56,11 +56,7 @@ router.post('/:societeId', authenticateToken, requireSocieteAccess, async (req, 
 
     res.status(201).json(ecriture);
   } catch (err) {
-    if (err.message.includes('inconnu') || err.message.includes('Écriture') || err.message.includes('ligne') || err.message.includes('montants') || err.message.includes('nul')) {
-      return res.status(400).json({ error: err.message });
-    }
-    console.error('Create ecriture error:', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(400).json({ error: err.message });
   }
 });
 
