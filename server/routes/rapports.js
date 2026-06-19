@@ -9,12 +9,18 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-async function getEcritures(societeId, exercice) {
+// dateDebut/dateFin (YYYY-MM-DD, optionnels) restreignent aux écritures dont la date tombe dans
+// cette plage, en plus du filtre par exercice — permet de consulter un mois ou une période
+// personnalisée plutôt que l'exercice entier.
+async function getEcritures(societeId, exercice, dateDebut, dateFin) {
   const snap = await db.collection('ecritures')
     .where('societeId', '==', societeId)
     .where('exercice', '==', Number(exercice))
     .get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  let ecritures = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (dateDebut) ecritures = ecritures.filter(ec => ec.date >= dateDebut);
+  if (dateFin) ecritures = ecritures.filter(ec => ec.date <= dateFin);
+  return ecritures;
 }
 
 async function getPlanComptable(societeId) {
@@ -26,8 +32,8 @@ async function getPlanComptable(societeId) {
   return map;
 }
 
-async function getSoldes(societeId, exercice) {
-  const ecritures = await getEcritures(societeId, exercice);
+async function getSoldes(societeId, exercice, dateDebut, dateFin) {
+  const ecritures = await getEcritures(societeId, exercice, dateDebut, dateFin);
   const soldes = new Map();
   for (const ec of ecritures) {
     for (const ligne of ec.lignes) {
@@ -65,8 +71,8 @@ function sommeProduits(soldes, comptes) {
   return round2(comptes.reduce((s, c) => s - (soldes.get(c) || 0), 0));
 }
 
-async function calculerESG(societeId, exercice) {
-  const soldes = await getSoldes(societeId, exercice);
+async function calculerESG(societeId, exercice, dateDebut, dateFin) {
+  const soldes = await getSoldes(societeId, exercice, dateDebut, dateFin);
   const G = ESG_GROUPES;
 
   const ventesMarchandises = sommeProduits(soldes, G.ventesMarchandises);
@@ -139,37 +145,43 @@ function sommeClasseEtPrefixe(soldes, planComptable, classe, prefixeExclu) {
   return total;
 }
 
-// GET /api/rapports/:societeId/grand-livre?compte=XXX&exercice=YYYY
+// GET /api/rapports/:societeId/grand-livre?compte=XXX&exercice=YYYY&dateDebut=&dateFin=
 router.get('/:societeId/grand-livre', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
-    const { compte, exercice } = req.query;
+    const { compte, exercice, dateDebut, dateFin } = req.query;
 
     if (!compte || !exercice) {
       return res.status(400).json({ error: 'compte et exercice sont requis' });
     }
 
+    // Toutes les écritures de l'exercice, pour calculer le solde initial avant dateDebut.
     const ecritures = await getEcritures(societeId, exercice);
 
+    let soldeInitial = 0;
     const mouvements = [];
     for (const ec of ecritures) {
       for (const ligne of ec.lignes) {
-        if (ligne.compte === String(compte)) {
-          mouvements.push({
-            date: ec.date,
-            journalCode: ec.journalCode,
-            numero: ec.numero,
-            libelle: ligne.libelle || ec.libelle,
-            debit: ligne.debit,
-            credit: ligne.credit,
-          });
+        if (ligne.compte !== String(compte)) continue;
+        if (dateDebut && ec.date < dateDebut) {
+          soldeInitial = round2(soldeInitial + ligne.debit - ligne.credit);
+          continue;
         }
+        if (dateFin && ec.date > dateFin) continue;
+        mouvements.push({
+          date: ec.date,
+          journalCode: ec.journalCode,
+          numero: ec.numero,
+          libelle: ligne.libelle || ec.libelle,
+          debit: ligne.debit,
+          credit: ligne.credit,
+        });
       }
     }
 
     mouvements.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.numero - b.numero));
 
-    let solde = 0;
+    let solde = soldeInitial;
     const lignes = mouvements.map(m => {
       solde = round2(solde + m.debit - m.credit);
       return { ...m, solde };
@@ -178,24 +190,24 @@ router.get('/:societeId/grand-livre', authenticateToken, requireSocieteAccess, a
     const totalDebit = round2(mouvements.reduce((s, m) => s + m.debit, 0));
     const totalCredit = round2(mouvements.reduce((s, m) => s + m.credit, 0));
 
-    res.json({ compte, totalDebit, totalCredit, soldeFinal: solde, lignes });
+    res.json({ compte, soldeInitial, totalDebit, totalCredit, soldeFinal: solde, lignes });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/rapports/:societeId/balance?exercice=YYYY
+// GET /api/rapports/:societeId/balance?exercice=YYYY&dateDebut=&dateFin=
 router.get('/:societeId/balance', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
-    const { exercice } = req.query;
+    const { exercice, dateDebut, dateFin } = req.query;
 
     if (!exercice) {
       return res.status(400).json({ error: 'exercice requis' });
     }
 
     const [ecritures, planComptable] = await Promise.all([
-      getEcritures(societeId, exercice),
+      getEcritures(societeId, exercice, dateDebut, dateFin),
       getPlanComptable(societeId),
     ]);
 
@@ -236,15 +248,15 @@ router.get('/:societeId/balance', authenticateToken, requireSocieteAccess, async
   }
 });
 
-// GET /api/rapports/:societeId/bilan?exercice=YYYY — Actif / Passif (classes 1 à 5)
+// GET /api/rapports/:societeId/bilan?exercice=YYYY&dateDebut=&dateFin= — Actif / Passif (classes 1 à 5)
 router.get('/:societeId/bilan', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
-    const { exercice } = req.query;
+    const { exercice, dateDebut, dateFin } = req.query;
     if (!exercice) return res.status(400).json({ error: 'exercice requis' });
 
     const [ecritures, planComptable] = await Promise.all([
-      getEcritures(societeId, exercice),
+      getEcritures(societeId, exercice, dateDebut, dateFin),
       getPlanComptable(societeId),
     ]);
 
@@ -290,15 +302,15 @@ router.get('/:societeId/bilan', authenticateToken, requireSocieteAccess, async (
   }
 });
 
-// GET /api/rapports/:societeId/resultat?exercice=YYYY — Charges / Produits (classes 6 et 7)
+// GET /api/rapports/:societeId/resultat?exercice=YYYY&dateDebut=&dateFin= — Charges / Produits (classes 6 et 7)
 router.get('/:societeId/resultat', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
-    const { exercice } = req.query;
+    const { exercice, dateDebut, dateFin } = req.query;
     if (!exercice) return res.status(400).json({ error: 'exercice requis' });
 
     const [ecritures, planComptable] = await Promise.all([
-      getEcritures(societeId, exercice),
+      getEcritures(societeId, exercice, dateDebut, dateFin),
       getPlanComptable(societeId),
     ]);
 
@@ -341,11 +353,11 @@ router.get('/:societeId/resultat', authenticateToken, requireSocieteAccess, asyn
   }
 });
 
-// GET /api/rapports/:societeId/balance-auxiliaire?type=client|fournisseur&exercice=YYYY
+// GET /api/rapports/:societeId/balance-auxiliaire?type=client|fournisseur&exercice=YYYY&dateDebut=&dateFin=
 router.get('/:societeId/balance-auxiliaire', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
-    const { type, exercice } = req.query;
+    const { type, exercice, dateDebut, dateFin } = req.query;
 
     if (!type || !['client', 'fournisseur'].includes(type)) {
       return res.status(400).json({ error: 'type doit être "client" ou "fournisseur"' });
@@ -355,7 +367,7 @@ router.get('/:societeId/balance-auxiliaire', authenticateToken, requireSocieteAc
     }
 
     const [ecritures, tiersSnap] = await Promise.all([
-      getEcritures(societeId, exercice),
+      getEcritures(societeId, exercice, dateDebut, dateFin),
       db.collection('tiers').where('societeId', '==', societeId).where('type', '==', type).get(),
     ]);
 
@@ -440,14 +452,14 @@ router.get('/:societeId/declaration-tva', authenticateToken, requireSocieteAcces
   }
 });
 
-// GET /api/rapports/:societeId/esg?exercice=YYYY — État des Soldes de Gestion (cascade SYSCOHADA)
+// GET /api/rapports/:societeId/esg?exercice=YYYY&dateDebut=&dateFin= — État des Soldes de Gestion
 router.get('/:societeId/esg', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
-    const { exercice } = req.query;
+    const { exercice, dateDebut, dateFin } = req.query;
     if (!exercice) return res.status(400).json({ error: 'exercice requis' });
 
-    const esg = await calculerESG(societeId, exercice);
+    const esg = await calculerESG(societeId, exercice, dateDebut, dateFin);
     res.json(esg);
   } catch (err) {
     res.status(500).json({ error: err.message });

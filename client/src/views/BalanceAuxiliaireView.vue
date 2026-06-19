@@ -3,22 +3,37 @@ import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { exportCsv } from '../utils/csv';
+import { optionsPeriode } from '../utils/periode';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 
 const type = ref('client');
 const exercice = ref(null);
+const periodeChoisie = ref('annee');
+const dateDebut = ref('');
+const dateFin = ref('');
 const result = ref(null);
 const error = ref('');
 const loading = ref(false);
+
+const periodes = computed(() => optionsPeriode(exercice.value || new Date().getFullYear()));
+
+function onPeriodeChange() {
+  const p = periodes.value.find(p => p.value === periodeChoisie.value);
+  if (p) {
+    dateDebut.value = p.dateDebut;
+    dateFin.value = p.dateFin;
+  }
+  load();
+}
 
 async function load() {
   if (!activeSociete.value) return;
   error.value = '';
   loading.value = true;
   try {
-    result.value = await api.get(`/api/rapports/${activeSociete.value.id}/balance-auxiliaire?type=${type.value}&exercice=${exercice.value}`);
+    result.value = await api.get(`/api/rapports/${activeSociete.value.id}/balance-auxiliaire?type=${type.value}&exercice=${exercice.value}&dateDebut=${dateDebut.value}&dateFin=${dateFin.value}`);
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -28,7 +43,7 @@ async function load() {
 
 function exporter() {
   if (!result.value) return;
-  exportCsv(`balance_auxiliaire_${type.value}_${activeSociete.value.id}_${exercice.value}.csv`, result.value.lignes, [
+  exportCsv(`balance_auxiliaire_${type.value}_${activeSociete.value.id}_${dateDebut.value}_${dateFin.value}.csv`, result.value.lignes, [
     { label: 'Compte', key: 'compteNumero' },
     { label: 'Nom', key: 'nom' },
     { label: 'Total débit', key: 'totalDebit' },
@@ -40,6 +55,9 @@ function exporter() {
 watch(activeSociete, () => {
   if (activeSociete.value) {
     exercice.value = activeSociete.value.exerciceCourant;
+    periodeChoisie.value = 'annee';
+    dateDebut.value = `${exercice.value}-01-01`;
+    dateFin.value = `${exercice.value}-12-31`;
   }
   load();
 }, { immediate: true });
@@ -62,7 +80,13 @@ watch(type, load);
         </label>
         <label>
           Exercice
-          <input v-model.number="exercice" type="number" @change="load" />
+          <input v-model.number="exercice" type="number" @change="onPeriodeChange" />
+        </label>
+        <label>
+          Période
+          <select v-model="periodeChoisie" @change="onPeriodeChange">
+            <option v-for="p in periodes" :key="p.value" :value="p.value">{{ p.label }}</option>
+          </select>
         </label>
         <button class="btn secondary" :disabled="!result" @click="exporter">Exporter CSV</button>
       </div>

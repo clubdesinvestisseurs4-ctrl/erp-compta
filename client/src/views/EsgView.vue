@@ -3,14 +3,29 @@ import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { exportCsv } from '../utils/csv';
+import { optionsPeriode } from '../utils/periode';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 
 const exercice = ref(null);
+const periodeChoisie = ref('annee');
+const dateDebut = ref('');
+const dateFin = ref('');
 const esg = ref(null);
 const error = ref('');
 const loading = ref(false);
+
+const periodes = computed(() => optionsPeriode(exercice.value || new Date().getFullYear()));
+
+function onPeriodeChange() {
+  const p = periodes.value.find(p => p.value === periodeChoisie.value);
+  if (p) {
+    dateDebut.value = p.dateDebut;
+    dateFin.value = p.dateFin;
+  }
+  load();
+}
 
 const lignes = computed(() => {
   if (!esg.value) return [];
@@ -45,7 +60,7 @@ async function load() {
   error.value = '';
   loading.value = true;
   try {
-    esg.value = await api.get(`/api/rapports/${activeSociete.value.id}/esg?exercice=${exercice.value}`);
+    esg.value = await api.get(`/api/rapports/${activeSociete.value.id}/esg?exercice=${exercice.value}&dateDebut=${dateDebut.value}&dateFin=${dateFin.value}`);
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -55,7 +70,7 @@ async function load() {
 
 function exporter() {
   if (!esg.value) return;
-  exportCsv(`esg_${activeSociete.value.id}_${exercice.value}.csv`, lignes.value, [
+  exportCsv(`esg_${activeSociete.value.id}_${dateDebut.value}_${dateFin.value}.csv`, lignes.value, [
     { label: 'Solde de gestion', key: 'libelle' },
     { label: 'Montant', key: 'montant' },
   ]);
@@ -64,6 +79,9 @@ function exporter() {
 watch(activeSociete, () => {
   if (activeSociete.value) {
     exercice.value = activeSociete.value.exerciceCourant;
+    periodeChoisie.value = 'annee';
+    dateDebut.value = `${exercice.value}-01-01`;
+    dateFin.value = `${exercice.value}-12-31`;
   }
   load();
 }, { immediate: true });
@@ -79,7 +97,13 @@ watch(activeSociete, () => {
       <div class="form-row">
         <label>
           Exercice
-          <input v-model.number="exercice" type="number" @change="load" />
+          <input v-model.number="exercice" type="number" @change="onPeriodeChange" />
+        </label>
+        <label>
+          Période
+          <select v-model="periodeChoisie" @change="onPeriodeChange">
+            <option v-for="p in periodes" :key="p.value" :value="p.value">{{ p.label }}</option>
+          </select>
         </label>
         <button class="btn secondary" :disabled="!esg" @click="exporter">Exporter CSV</button>
       </div>
