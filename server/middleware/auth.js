@@ -10,7 +10,9 @@ function authenticateToken(req, res, next) {
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ error: 'Token invalide ou expiré' });
+      // 401 (et non 403) : le frontend déclenche une déconnexion automatique
+      // sur toute réponse 401, à distinguer des 403 d'autorisation (rôle/société).
+      return res.status(401).json({ error: 'Token invalide ou expiré' });
     }
     req.user = user;
     next();

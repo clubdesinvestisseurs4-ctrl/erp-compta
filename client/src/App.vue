@@ -9,6 +9,7 @@ const societeStore = useSocieteStore();
 
 onMounted(() => {
   if (auth.isAuthenticated) {
+    auth.scheduleExpiry();
     societeStore.fetchSocietes();
   }
 });

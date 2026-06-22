@@ -9,10 +9,14 @@ const activeSociete = computed(() => societeStore.activeSociete);
 const comptes = ref([]);
 const error = ref('');
 const success = ref('');
+const erreursImport = ref([]);
 const loading = ref(false);
+const importing = ref(false);
 const search = ref('');
 
 const nouveauCompte = ref({ numero: '', libelle: '', classe: 6 });
+const fichierExcel = ref(null);
+const fichierInput = ref(null);
 
 const comptesFiltres = computed(() => {
   const term = search.value.trim().toLowerCase();
@@ -48,6 +52,32 @@ async function seed() {
   }
 }
 
+function onFichierChange(e) {
+  fichierExcel.value = e.target.files[0] || null;
+}
+
+async function importerExcel() {
+  if (!activeSociete.value || !fichierExcel.value) return;
+  error.value = '';
+  success.value = '';
+  erreursImport.value = [];
+  importing.value = true;
+  try {
+    const formData = new FormData();
+    formData.append('fichier', fichierExcel.value);
+    const res = await api.uploadFile(`/api/comptes/${activeSociete.value.id}/import`, formData);
+    success.value = `Plan comptable importé (${res.count} comptes).`;
+    fichierExcel.value = null;
+    if (fichierInput.value) fichierInput.value.value = '';
+    await load();
+  } catch (err) {
+    error.value = err.message;
+    erreursImport.value = err.details || [];
+  } finally {
+    importing.value = false;
+  }
+}
+
 async function ajouterCompte() {
   if (!activeSociete.value) return;
   error.value = '';
@@ -73,12 +103,32 @@ watch(activeSociete, load, { immediate: true });
   <div>
     <h1>Plan comptable {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
 
-    <div v-if="error" class="error">{{ error }}</div>
+    <div v-if="error" class="error">
+      {{ error }}
+      <ul v-if="erreursImport.length">
+        <li v-for="(e, i) in erreursImport" :key="i">{{ e }}</li>
+      </ul>
+    </div>
     <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card" v-if="!loading && comptes.length === 0">
       <p>Aucun compte. Initialiser le référentiel SYSCOHADA pour cette société ?</p>
       <button class="btn" @click="seed">Initialiser le plan comptable SYSCOHADA</button>
+    </div>
+
+    <div class="card">
+      <h2>Importer un plan comptable depuis Excel</h2>
+      <p class="muted">
+        Fichier .xlsx avec en première ligne les colonnes <strong>Numéro</strong>, <strong>Libellé</strong>
+        et <strong>Classe</strong> (optionnelle, déduite du 1er chiffre du numéro si absente).
+        Les comptes du fichier sont créés ou mis à jour ; les comptes existants non présents dans le fichier sont conservés.
+      </p>
+      <div class="form-row">
+        <input ref="fichierInput" type="file" accept=".xlsx" @change="onFichierChange" />
+        <button class="btn" @click="importerExcel" :disabled="!fichierExcel || importing">
+          {{ importing ? 'Import en cours...' : 'Importer' }}
+        </button>
+      </div>
     </div>
 
     <div class="card">

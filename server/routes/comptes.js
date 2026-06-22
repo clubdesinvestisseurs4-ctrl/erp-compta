@@ -1,13 +1,53 @@
 const express = require('express');
+const multer = require('multer');
 const { db } = require('../firebase-admin');
 const { authenticateToken } = require('../middleware/auth');
 const { requireSocieteAccess } = require('../middleware/societe');
 const planComptableSyscohada = require('../data/planComptableSyscohada');
+const { parsePlanComptableExcel } = require('../utils/importPlanComptable');
 
 const router = express.Router({ mergeParams: true });
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 Mo
+});
+
+// Encapsule multer pour renvoyer une erreur JSON 400 propre (fichier trop volumineux, etc.)
+// plutôt que de laisser planter sur le handler d'erreurs générique 500.
+function uploadFichier(req, res, next) {
+  upload.single('fichier')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'Fichier trop volumineux (2 Mo maximum).' });
+      }
+      return res.status(400).json({ error: err.message || 'Erreur lors du téléchargement du fichier.' });
+    }
+    next();
+  });
+}
+
 function docId(societeId, numero) {
   return `${societeId}_${numero}`;
+}
+
+// Écrit en base un lot de comptes du plan comptable (création ou mise à jour), par batches de 400.
+async function ecrireComptes(societeId, comptes) {
+  const batches = [];
+  let batch = db.batch();
+  let count = 0;
+
+  for (const compte of comptes) {
+    const ref = db.collection('plan_comptable').doc(docId(societeId, compte.numero));
+    batch.set(ref, { societeId, ...compte });
+    count++;
+    if (count % 400 === 0) {
+      batches.push(batch.commit());
+      batch = db.batch();
+    }
+  }
+  batches.push(batch.commit());
+  await Promise.all(batches);
 }
 
 // GET /api/comptes/:societeId — plan comptable de la société, trié par numéro
@@ -39,25 +79,36 @@ router.post('/:societeId/seed', authenticateToken, requireSocieteAccess, async (
       return res.status(409).json({ error: 'Plan comptable déjà initialisé pour cette société' });
     }
 
-    const batches = [];
-    let batch = db.batch();
-    let count = 0;
-
-    for (const compte of planComptableSyscohada) {
-      const ref = db.collection('plan_comptable').doc(docId(societeId, compte.numero));
-      batch.set(ref, { societeId, ...compte });
-      count++;
-      if (count % 400 === 0) {
-        batches.push(batch.commit());
-        batch = db.batch();
-      }
-    }
-    batches.push(batch.commit());
-    await Promise.all(batches);
+    await ecrireComptes(societeId, planComptableSyscohada);
 
     res.json({ message: 'Plan comptable SYSCOHADA initialisé', count: planComptableSyscohada.length });
   } catch (err) {
     console.error('Seed comptes error:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/comptes/:societeId/import — charge un plan comptable spécifique depuis un fichier Excel (.xlsx)
+// Colonnes attendues en première ligne : Numéro, Libellé, Classe (optionnelle, déduite du 1er chiffre du numéro sinon).
+// Les comptes du fichier sont créés ou mis à jour (libellé/classe) ; les comptes existants absents du fichier sont conservés.
+router.post('/:societeId/import', authenticateToken, requireSocieteAccess, uploadFichier, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Fichier Excel requis (champ "fichier").' });
+    }
+
+    let comptes;
+    try {
+      comptes = await parsePlanComptableExcel(req.file.buffer);
+    } catch (err) {
+      return res.status(400).json({ error: err.message, details: err.details });
+    }
+
+    await ecrireComptes(req.params.societeId, comptes);
+
+    res.json({ message: 'Plan comptable importé avec succès', count: comptes.length });
+  } catch (err) {
+    console.error('Import comptes error:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

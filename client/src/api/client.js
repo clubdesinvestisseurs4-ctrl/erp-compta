@@ -1,7 +1,19 @@
+import { TOKEN_KEY, forceLogout } from '../utils/session';
+
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002';
 
+// Le login peut légitimement renvoyer 401 (identifiants invalides) sans que
+// l'utilisateur n'ait jamais eu de session — ne pas le traiter comme une expiration.
+function handleUnauthorized(path, status) {
+  if (status === 401 && path !== '/api/auth/login') {
+    forceLogout();
+    return true;
+  }
+  return false;
+}
+
 async function request(path, options = {}) {
-  const token = localStorage.getItem('erp_token');
+  const token = localStorage.getItem(TOKEN_KEY);
 
   const headers = {
     'Content-Type': 'application/json',
@@ -13,6 +25,10 @@ async function request(path, options = {}) {
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
+  if (handleUnauthorized(path, res.status)) {
+    throw new Error('Session expirée, veuillez vous reconnecter.');
+  }
+
   let data = null;
   try {
     data = await res.json();
@@ -22,17 +38,53 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const message = (data && data.error) || `Erreur ${res.status}`;
-    throw new Error(message);
+    const error = new Error(message);
+    if (data && data.details) error.details = data.details;
+    throw error;
+  }
+
+  return data;
+}
+
+async function uploadFile(path, formData) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: formData });
+
+  if (handleUnauthorized(path, res.status)) {
+    throw new Error('Session expirée, veuillez vous reconnecter.');
+  }
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    const message = (data && data.error) || `Erreur ${res.status}`;
+    const error = new Error(message);
+    if (data && data.details) error.details = data.details;
+    throw error;
   }
 
   return data;
 }
 
 async function downloadFile(path, filename) {
-  const token = localStorage.getItem('erp_token');
+  const token = localStorage.getItem(TOKEN_KEY);
   const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
+
+  if (handleUnauthorized(path, res.status)) {
+    throw new Error('Session expirée, veuillez vous reconnecter.');
+  }
 
   if (!res.ok) {
     let message = `Erreur ${res.status}`;
@@ -61,6 +113,7 @@ export const api = {
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body || {}) }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body || {}) }),
   delete: (path) => request(path, { method: 'DELETE' }),
+  uploadFile,
   downloadFile,
 };
 
