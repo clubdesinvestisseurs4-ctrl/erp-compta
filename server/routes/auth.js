@@ -12,12 +12,20 @@ router.get('/debug-fs', async (req, res) => {
     const projectId = admin.app().options.credential.projectId || process.env.FIREBASE_PROJECT_ID;
 
     const tokenResult = await admin.app().options.credential.getAccessToken();
+    const tokenPrefix = tokenResult.access_token?.slice(0, 12);
+    const tokenLength = tokenResult.access_token?.length;
+
     const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/utilisateurs`;
     const r = await fetch(url, {
       headers: { Authorization: `Bearer ${tokenResult.access_token}` },
     });
     const body = await r.text();
-    res.status(200).json({ projectId, httpStatus: r.status, body });
+
+    const url2 = 'https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + tokenResult.access_token;
+    const r2 = await fetch(url2);
+    const body2 = await r2.text();
+
+    res.status(200).json({ projectId, tokenPrefix, tokenLength, httpStatus: r.status, body, tokenInfoStatus: r2.status, tokenInfoBody: body2 });
   } catch (err) {
     res.status(200).json({ caught: true, message: err.message, stack: err.stack });
   }
