@@ -1,10 +1,27 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { db } = require('../firebase-admin');
+const { db, admin } = require('../firebase-admin');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
+
+// GET /api/auth/debug-fs — diagnostic temporaire, à retirer une fois le problème résolu
+router.get('/debug-fs', async (req, res) => {
+  try {
+    const projectId = admin.app().options.credential.projectId || process.env.FIREBASE_PROJECT_ID;
+
+    const tokenResult = await admin.app().options.credential.getAccessToken();
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/utilisateurs`;
+    const r = await fetch(url, {
+      headers: { Authorization: `Bearer ${tokenResult.access_token}` },
+    });
+    const body = await r.text();
+    res.status(200).json({ projectId, httpStatus: r.status, body });
+  } catch (err) {
+    res.status(200).json({ caught: true, message: err.message, stack: err.stack });
+  }
+});
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
