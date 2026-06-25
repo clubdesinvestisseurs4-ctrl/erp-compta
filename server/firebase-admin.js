@@ -1,6 +1,11 @@
 const admin = require('firebase-admin');
+const fs = require('fs');
 
 function loadCredential() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_FILE) {
+    const json = fs.readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_FILE, 'utf8');
+    return admin.credential.cert(JSON.parse(json));
+  }
   if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
     const cleaned = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64.replace(/\s/g, '');
     const json = Buffer.from(cleaned, 'base64').toString('utf8');
