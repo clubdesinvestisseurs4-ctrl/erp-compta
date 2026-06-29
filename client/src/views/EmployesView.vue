@@ -7,87 +7,11 @@ const societeStore = useSocieteStore();
 
 const employes = ref([]);
 const error = ref('');
-const success = ref('');
-const saving = ref(false);
-
-const form = ref({
-  nom: '',
-  prenom: '',
-  poste: '',
-  tauxHoraire: '',
-  societesAccess: [],
-});
-
-const editingId = ref(null);
 
 async function load() {
   error.value = '';
   try {
     employes.value = await api.get('/api/employes');
-  } catch (err) {
-    error.value = err.message;
-  }
-}
-
-function resetForm() {
-  form.value = { nom: '', prenom: '', poste: '', tauxHoraire: '', societesAccess: [] };
-  editingId.value = null;
-}
-
-function modifier(employe) {
-  form.value = {
-    nom: employe.nom,
-    prenom: employe.prenom,
-    poste: employe.poste || '',
-    tauxHoraire: employe.tauxHoraire,
-    societesAccess: [...employe.societesAccess],
-  };
-  editingId.value = employe.id;
-  success.value = '';
-  error.value = '';
-}
-
-async function enregistrer() {
-  error.value = '';
-  success.value = '';
-
-  if (!form.value.nom || !form.value.prenom || !form.value.tauxHoraire || form.value.societesAccess.length === 0) {
-    error.value = 'Nom, prénom, taux horaire et au moins une société sont requis.';
-    return;
-  }
-
-  const payload = {
-    nom: form.value.nom,
-    prenom: form.value.prenom,
-    poste: form.value.poste,
-    tauxHoraire: Number(form.value.tauxHoraire),
-    societesAccess: form.value.societesAccess,
-  };
-
-  saving.value = true;
-  try {
-    if (editingId.value) {
-      await api.put(`/api/employes/${editingId.value}`, payload);
-      success.value = 'Employé mis à jour.';
-    } else {
-      await api.post('/api/employes', payload);
-      success.value = 'Employé créé.';
-    }
-    resetForm();
-    await load();
-  } catch (err) {
-    error.value = err.message;
-  } finally {
-    saving.value = false;
-  }
-}
-
-async function supprimer(employe) {
-  if (!confirm(`Désactiver l'employé ${employe.prenom} ${employe.nom} ?`)) return;
-  error.value = '';
-  try {
-    await api.delete(`/api/employes/${employe.id}`);
-    await load();
   } catch (err) {
     error.value = err.message;
   }
@@ -108,61 +32,30 @@ onMounted(() => {
     <h1>Personnel</h1>
 
     <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
-    <div class="card">
-      <h2>{{ editingId ? 'Modifier l\'employé' : 'Nouvel employé' }}</h2>
-      <div class="form-row">
-        <label>
-          Nom
-          <input v-model="form.nom" type="text" />
-        </label>
-        <label>
-          Prénom
-          <input v-model="form.prenom" type="text" />
-        </label>
-        <label>
-          Poste
-          <input v-model="form.poste" type="text" />
-        </label>
-        <label>
-          Taux horaire
-          <input v-model="form.tauxHoraire" type="number" min="0" step="0.01" />
-        </label>
-      </div>
-      <div class="form-row">
-        <label v-for="s in societeStore.societes" :key="s.id">
-          <input type="checkbox" :value="s.id" v-model="form.societesAccess" />
-          {{ s.nom }}
-        </label>
-      </div>
-      <div class="form-row">
-        <button class="btn" :disabled="saving" @click="enregistrer">{{ editingId ? 'Enregistrer' : 'Ajouter' }}</button>
-        <button v-if="editingId" class="btn secondary" :disabled="saving" @click="resetForm">Annuler</button>
-      </div>
-    </div>
+    <p class="muted">
+      Les employés sont créés et gérés dans l'application Gestion Employés — cette page n'en affiche
+      que la liste, à titre de référentiel pour la paie et le pointage.
+    </p>
 
     <div class="card">
       <table v-if="employes.length" class="table-cards">
         <thead>
           <tr>
+            <th>Matricule</th>
             <th>Nom</th>
             <th>Poste</th>
-            <th class="num">Taux horaire</th>
-            <th>Sociétés</th>
-            <th></th>
+            <th class="num">Salaire mensuel</th>
+            <th>Établissements</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="e in employes" :key="e.id">
+            <td data-label="Matricule">{{ e.matricule }}</td>
             <td data-label="Nom">{{ e.prenom }} {{ e.nom }}</td>
             <td data-label="Poste">{{ e.poste }}</td>
-            <td class="num" data-label="Taux horaire">{{ e.tauxHoraire.toLocaleString('fr-FR') }}</td>
-            <td data-label="Sociétés">{{ e.societesAccess.map(societeNom).join(', ') }}</td>
-            <td data-label="" class="actions-cell">
-              <button class="btn secondary" @click="modifier(e)">Modifier</button>
-              <button class="btn danger" @click="supprimer(e)">Désactiver</button>
-            </td>
+            <td class="num" data-label="Salaire mensuel">{{ e.salaireMensuel?.toLocaleString('fr-FR') }}</td>
+            <td data-label="Établissements">{{ e.etablissementsAccess.map(societeNom).join(', ') }}</td>
           </tr>
         </tbody>
       </table>

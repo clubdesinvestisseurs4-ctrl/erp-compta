@@ -111,8 +111,10 @@ watch(periode, load);
           <tr>
             <th>Employé</th>
             <th class="num">Heures</th>
-            <th class="num">Taux horaire</th>
-            <th class="num">Salaire</th>
+            <th class="num">Congés payés</th>
+            <th class="num">Salaire brut</th>
+            <th class="num">Avance déduite</th>
+            <th class="num">Net</th>
             <th>Statut</th>
             <th></th>
           </tr>
@@ -120,9 +122,11 @@ watch(periode, load);
         <tbody>
           <tr v-for="f in fiches" :key="f.id">
             <td data-label="Employé">{{ f.employeNom }}</td>
-            <td class="num" data-label="Heures">{{ f.heures }}</td>
-            <td class="num" data-label="Taux horaire">{{ f.tauxHoraire.toLocaleString('fr-FR') }}</td>
-            <td class="num" data-label="Salaire">{{ f.salaire.toLocaleString('fr-FR') }}</td>
+            <td class="num" data-label="Heures">{{ f.heuresPointees }}</td>
+            <td class="num" data-label="Congés payés">{{ f.heuresCongesPayees }}</td>
+            <td class="num" data-label="Salaire brut">{{ f.salaireBrutCalcule.toLocaleString('fr-FR') }}</td>
+            <td class="num" data-label="Avance déduite">{{ f.avanceDeduite.toLocaleString('fr-FR') }}</td>
+            <td class="num" data-label="Net">{{ f.salaireNet.toLocaleString('fr-FR') }}</td>
             <td data-label="Statut">{{ f.statut }}</td>
             <td data-label="" class="actions-cell">
               <RouterLink class="btn secondary" :to="`/paie/${f.id}/bulletin`">Bulletin</RouterLink>

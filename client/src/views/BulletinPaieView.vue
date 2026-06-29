@@ -10,7 +10,6 @@ const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 
 const fiche = ref(null);
-const employe = ref(null);
 const societe = ref(null);
 const error = ref('');
 const loading = ref(false);
@@ -28,7 +27,6 @@ async function load() {
   try {
     const res = await api.get(`/api/paie/${activeSociete.value.id}/${route.params.id}`);
     fiche.value = res.fiche;
-    employe.value = res.employe;
     societe.value = res.societe;
   } catch (err) {
     error.value = err.message;
@@ -69,7 +67,8 @@ onMounted(load);
 
         <div class="bulletin-employe">
           <p><strong>Employé :</strong> {{ fiche.employeNom }}</p>
-          <p v-if="employe?.poste"><strong>Poste :</strong> {{ employe.poste }}</p>
+          <p v-if="fiche.matricule"><strong>Matricule :</strong> {{ fiche.matricule }}</p>
+          <p v-if="fiche.poste"><strong>Poste :</strong> {{ fiche.poste }}</p>
         </div>
 
         <table class="table-cards">
@@ -77,25 +76,42 @@ onMounted(load);
             <tr>
               <th>Désignation</th>
               <th class="num">Heures</th>
-              <th class="num">Taux horaire</th>
               <th class="num">Montant</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td data-label="Désignation">Salaire de base</td>
-              <td class="num" data-label="Heures">{{ fiche.heures }}</td>
-              <td class="num" data-label="Taux horaire">{{ fiche.tauxHoraire.toLocaleString('fr-FR') }}</td>
-              <td class="num" data-label="Montant">{{ fiche.salaire.toLocaleString('fr-FR') }}</td>
+              <td data-label="Désignation">Heures pointées</td>
+              <td class="num" data-label="Heures">{{ fiche.heuresPointees }}</td>
+              <td class="num" data-label="Montant"></td>
+            </tr>
+            <tr>
+              <td data-label="Désignation">Congés / permissions payés</td>
+              <td class="num" data-label="Heures">{{ fiche.heuresCongesPayees }}</td>
+              <td class="num" data-label="Montant"></td>
+            </tr>
+            <tr>
+              <td data-label="Désignation">Salaire brut ({{ fiche.totalHeures }} / {{ fiche.heuresAttenduesMois }} h, base {{ fiche.salaireMensuelBase.toLocaleString('fr-FR') }})</td>
+              <td class="num" data-label="Heures"></td>
+              <td class="num" data-label="Montant">{{ fiche.salaireBrutCalcule.toLocaleString('fr-FR') }}</td>
+            </tr>
+            <tr v-if="fiche.avanceDeduite > 0">
+              <td data-label="Désignation">Avance sur salaire déduite</td>
+              <td class="num" data-label="Heures"></td>
+              <td class="num" data-label="Montant">-{{ fiche.avanceDeduite.toLocaleString('fr-FR') }}</td>
             </tr>
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="3"><strong>Net à payer</strong></td>
-              <td class="num" data-label="Montant"><strong>{{ fiche.salaire.toLocaleString('fr-FR') }} {{ societe?.devise || '' }}</strong></td>
+              <td colspan="2"><strong>Net à payer</strong></td>
+              <td class="num" data-label="Montant"><strong>{{ fiche.salaireNet.toLocaleString('fr-FR') }} {{ societe?.devise || '' }}</strong></td>
             </tr>
           </tfoot>
         </table>
+        <p class="muted" style="margin-top:8px">
+          Le montant comptabilisé (charge et trésorerie) est le salaire brut ; l'avance déduite est une
+          information RH, son remboursement n'est pas isolé dans une écriture séparée.
+        </p>
       </div>
     </template>
   </div>

@@ -2,7 +2,8 @@ const express = require('express');
 const { db } = require('../firebase-admin');
 const { authenticateToken } = require('../middleware/auth');
 const { requireSocieteAccess } = require('../middleware/societe');
-const { round2, createEcriture } = require('../utils/ecritures');
+const { createEcriture } = require('../utils/ecritures');
+const { getPaieEstimations, decrementerAvance } = require('../utils/gestionEmployeesClient');
 
 const router = express.Router({ mergeParams: true });
 
@@ -44,15 +45,10 @@ router.get('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
       return res.status(404).json({ error: 'Fiche de paie introuvable' });
     }
     const fiche = { id: doc.id, ...doc.data() };
-
-    const [employeDoc, societeDoc] = await Promise.all([
-      db.collection('employes').doc(fiche.employeId).get(),
-      db.collection('societes').doc(societeId).get(),
-    ]);
+    const societeDoc = await db.collection('societes').doc(societeId).get();
 
     res.json({
       fiche,
-      employe: employeDoc.exists ? employeDoc.data() : null,
       societe: societeDoc.exists ? societeDoc.data() : null,
     });
   } catch (err) {
@@ -60,7 +56,8 @@ router.get('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
   }
 });
 
-// POST /api/paie/:societeId/generer — génère les fiches de paie de la période à partir des pointages
+// POST /api/paie/:societeId/generer — génère les fiches de paie de la période à partir du calcul
+// officiel de App-Gestion-Employees (pointages réels + congés payés + avances)
 router.post('/:societeId/generer', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
@@ -70,17 +67,15 @@ router.post('/:societeId/generer', authenticateToken, requireSocieteAccess, asyn
       return res.status(400).json({ error: 'periode requise au format YYYY-MM' });
     }
 
-    const pointagesSnap = await db.collection('pointages').where('societeId', '==', societeId).get();
-    const heuresParEmploye = new Map();
-    for (const doc of pointagesSnap.docs) {
-      const p = doc.data();
-      if (!p.date.startsWith(periode)) continue;
-      const cumul = heuresParEmploye.get(p.employeId) || 0;
-      heuresParEmploye.set(p.employeId, round2(cumul + p.heures));
+    let estimations;
+    try {
+      estimations = await getPaieEstimations(societeId, periode);
+    } catch (err) {
+      return res.status(502).json({ error: err.message });
     }
 
-    if (heuresParEmploye.size === 0) {
-      return res.json({ message: 'Aucun pointage pour cette période', fiches: [] });
+    if (estimations.length === 0) {
+      return res.json({ message: 'Aucun employé actif pour cette période', fiches: [] });
     }
 
     const existantesSnap = await db.collection('fiches_paie')
@@ -89,36 +84,34 @@ router.post('/:societeId/generer', authenticateToken, requireSocieteAccess, asyn
       .get();
     const employesAvecFiche = new Set(existantesSnap.docs.map(d => d.data().employeId));
 
-    const employeIds = [...heuresParEmploye.keys()].filter(id => !employesAvecFiche.has(id));
-    if (employeIds.length === 0) {
+    const aCreer = estimations.filter(e => !employesAvecFiche.has(e.employeId));
+    if (aCreer.length === 0) {
       return res.json({ message: 'Toutes les fiches de paie existent déjà pour cette période', fiches: [] });
     }
 
-    const employeRefs = employeIds.map(id => db.collection('employes').doc(id));
-    const employeDocs = await db.getAll(...employeRefs);
-
     const fiches = [];
     const batch = db.batch();
-    for (const empDoc of employeDocs) {
-      if (!empDoc.exists) continue;
-      const employe = empDoc.data();
-      const heures = heuresParEmploye.get(empDoc.id);
-      const salaire = round2(heures * employe.tauxHoraire);
-
+    for (const e of aCreer) {
       const fiche = {
         societeId,
-        employeId: empDoc.id,
-        employeNom: `${employe.prenom} ${employe.nom}`,
+        employeId: e.employeId,
+        employeNom: e.employeNom,
+        matricule: e.matricule,
+        poste: e.poste,
         periode,
-        heures,
-        tauxHoraire: employe.tauxHoraire,
-        salaire,
+        heuresPointees: e.heuresPointees,
+        heuresCongesPayees: e.heuresCongesPayees,
+        totalHeures: e.totalHeures,
+        heuresAttenduesMois: e.heuresAttenduesMois,
+        salaireMensuelBase: e.salaireMensuelBase,
+        salaireBrutCalcule: e.salaireBrutCalcule,
+        avanceDeduite: e.avanceDeduite,
+        salaireNet: e.salaireNet,
         statut: 'brouillon',
         ecritureId: null,
         ecriturePaiementId: null,
         createdAt: new Date().toISOString(),
       };
-
       const ref = db.collection('fiches_paie').doc();
       batch.set(ref, fiche);
       fiches.push({ id: ref.id, ...fiche });
@@ -132,7 +125,10 @@ router.post('/:societeId/generer', authenticateToken, requireSocieteAccess, asyn
   }
 });
 
-// POST /api/paie/:societeId/:id/valider — comptabilise la fiche (661 / 422)
+// POST /api/paie/:societeId/:id/valider — comptabilise la fiche (661 / 422) sur le salaire brut.
+// L'avance déduite (si applicable) reste une information RH affichée sur le bulletin, sans
+// écriture comptable dédiée pour l'instant (décision explicite, pour ne pas introduire un compte
+// d'avances jamais débité à l'origine côté compta).
 router.post('/:societeId/:id/valider', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId, id } = req.params;
@@ -159,8 +155,8 @@ router.post('/:societeId/:id/valider', authenticateToken, requireSocieteAccess, 
         exercice,
         createdBy: req.user.username,
         lignes: [
-          { compte: COMPTE_CHARGE_SALAIRE, libelle: `Salaire ${fiche.periode} - ${fiche.employeNom}`, debit: fiche.salaire, credit: 0 },
-          { compte: COMPTE_PERSONNEL_DU, libelle: `Salaire ${fiche.periode} - ${fiche.employeNom}`, debit: 0, credit: fiche.salaire },
+          { compte: COMPTE_CHARGE_SALAIRE, libelle: `Salaire ${fiche.periode} - ${fiche.employeNom}`, debit: fiche.salaireBrutCalcule, credit: 0 },
+          { compte: COMPTE_PERSONNEL_DU, libelle: `Salaire ${fiche.periode} - ${fiche.employeNom}`, debit: 0, credit: fiche.salaireBrutCalcule },
         ],
       });
     } catch (err) {
@@ -175,7 +171,9 @@ router.post('/:societeId/:id/valider', authenticateToken, requireSocieteAccess, 
   }
 });
 
-// POST /api/paie/:societeId/:id/payer — comptabilise le paiement (422 / trésorerie)
+// POST /api/paie/:societeId/:id/payer — comptabilise le paiement (422 / trésorerie) sur le salaire
+// brut, puis notifie App-Gestion-Employees pour solder l'avance déduite côté RH (le solde d'avance
+// doit diminuer même si la compta ne distingue pas cette part dans l'écriture).
 router.post('/:societeId/:id/payer', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId, id } = req.params;
@@ -195,6 +193,14 @@ router.post('/:societeId/:id/payer', authenticateToken, requireSocieteAccess, as
       return res.status(409).json({ error: 'La fiche doit être validée avant le paiement' });
     }
 
+    if (fiche.avanceDeduite > 0) {
+      try {
+        await decrementerAvance(fiche.employeId, fiche.avanceDeduite);
+      } catch (err) {
+        return res.status(502).json({ error: `Échec de la mise à jour du solde d'avance côté RH : ${err.message}` });
+      }
+    }
+
     const societeDoc = await db.collection('societes').doc(societeId).get();
     const exercice = societeDoc.data().exerciceCourant;
 
@@ -211,8 +217,8 @@ router.post('/:societeId/:id/payer', authenticateToken, requireSocieteAccess, as
         exercice,
         createdBy: req.user.username,
         lignes: [
-          { compte: COMPTE_PERSONNEL_DU, libelle: `Paiement salaire ${fiche.periode} - ${fiche.employeNom}`, debit: fiche.salaire, credit: 0 },
-          { compte: String(compteTresorerie), libelle: `Paiement salaire ${fiche.periode} - ${fiche.employeNom}`, debit: 0, credit: fiche.salaire },
+          { compte: COMPTE_PERSONNEL_DU, libelle: `Paiement salaire ${fiche.periode} - ${fiche.employeNom}`, debit: fiche.salaireBrutCalcule, credit: 0 },
+          { compte: String(compteTresorerie), libelle: `Paiement salaire ${fiche.periode} - ${fiche.employeNom}`, debit: 0, credit: fiche.salaireBrutCalcule },
         ],
       });
     } catch (err) {
