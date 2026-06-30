@@ -5,10 +5,12 @@ import { api } from '../api/client';
 import { exportCsv } from '../utils/csv';
 import { optionsPeriode } from '../utils/periode';
 import { useToastStore } from '../stores/toast';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
+const refCache = useRefCacheStore();
 
 const comptes = ref([]);
 const compteSelectionne = ref('');
@@ -32,7 +34,8 @@ function onPeriodeChange() {
 
 async function loadComptes() {
   if (!activeSociete.value) return;
-  comptes.value = await api.get(`/api/comptes/${activeSociete.value.id}`);
+  const societeId = activeSociete.value.id;
+  comptes.value = await refCache.get(`comptes:${societeId}`, () => api.get(`/api/comptes/${societeId}`));
 }
 
 async function load() {

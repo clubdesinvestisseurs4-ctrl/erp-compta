@@ -4,11 +4,13 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
 import { useConfirmStore } from '../stores/confirm';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
 const confirmStore = useConfirmStore();
+const refCache = useRefCacheStore();
 
 const type = ref('fournisseur');
 const tiersList = ref([]);
@@ -42,7 +44,8 @@ const peutLettrer = computed(() => selection.value.size >= 2 && totalSelection.v
 
 async function loadTiers() {
   if (!activeSociete.value) return;
-  tiersList.value = await api.get(`/api/tiers/${activeSociete.value.id}?type=${type.value}`);
+  const societeId = activeSociete.value.id;
+  tiersList.value = await refCache.get(`tiers:${societeId}:${type.value}`, () => api.get(`/api/tiers/${societeId}?type=${type.value}`));
   tiersId.value = '';
   mouvements.value = [];
 }

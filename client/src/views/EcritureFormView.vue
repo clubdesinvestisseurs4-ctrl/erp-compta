@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
+import { useRefCacheStore } from '../stores/refCache';
 
 const router = useRouter();
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
+const refCache = useRefCacheStore();
 
 const journaux = ref([]);
 const comptes = ref([]);
@@ -57,9 +59,10 @@ function compteLabel(numero) {
 async function loadRefs() {
   if (!activeSociete.value) return;
   try {
+    const societeId = activeSociete.value.id;
     [journaux.value, comptes.value] = await Promise.all([
-      api.get(`/api/journaux/${activeSociete.value.id}`),
-      api.get(`/api/comptes/${activeSociete.value.id}`),
+      refCache.get(`journaux:${societeId}`, () => api.get(`/api/journaux/${societeId}`)),
+      refCache.get(`comptes:${societeId}`, () => api.get(`/api/comptes/${societeId}`)),
     ]);
     if (journaux.value.length && !form.value.journalCode) {
       form.value.journalCode = journaux.value[0].code;

@@ -4,11 +4,13 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
 import { useConfirmStore } from '../stores/confirm';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
 const confirmStore = useConfirmStore();
+const refCache = useRefCacheStore();
 
 const type = ref('client');
 const tiersList = ref([]);
@@ -19,7 +21,8 @@ const form = ref({ nom: '', telephone: '', email: '', adresse: '' });
 async function load() {
   if (!activeSociete.value) return;
   try {
-    tiersList.value = await api.get(`/api/tiers/${activeSociete.value.id}?type=${type.value}`);
+    const societeId = activeSociete.value.id;
+    tiersList.value = await refCache.get(`tiers:${societeId}:${type.value}`, () => api.get(`/api/tiers/${societeId}?type=${type.value}`));
   } catch (err) {
     toast.error(err.message);
   }
@@ -33,9 +36,13 @@ async function ajouter() {
 
   saving.value = true;
   try {
-    const res = await api.post(`/api/tiers/${activeSociete.value.id}`, { type: type.value, ...form.value });
+    const societeId = activeSociete.value.id;
+    const res = await api.post(`/api/tiers/${societeId}`, { type: type.value, ...form.value });
     toast.success(`${type.value === 'client' ? 'Client' : 'Fournisseur'} créé (compte ${res.compteNumero}).`);
     form.value = { nom: '', telephone: '', email: '', adresse: '' };
+    // La création d'un tiers crée aussi son compte auxiliaire dans le plan comptable.
+    refCache.invalidate(`tiers:${societeId}:${type.value}`);
+    refCache.invalidate(`comptes:${societeId}`);
     await load();
   } catch (err) {
     toast.error(err.message);
@@ -47,16 +54,19 @@ async function ajouter() {
 async function supprimer(tiers) {
   if (!(await confirmStore.ask(`Supprimer ${tiers.nom} ?`, { danger: true, confirmLabel: 'Supprimer' }))) return;
   try {
-    await api.delete(`/api/tiers/${activeSociete.value.id}/${tiers.id}`);
+    const societeId = activeSociete.value.id;
+    await api.delete(`/api/tiers/${societeId}/${tiers.id}`);
     toast.success(`${tiers.nom} supprimé.`);
+    refCache.invalidate(`tiers:${societeId}:${type.value}`);
+    refCache.invalidate(`comptes:${societeId}`);
     await load();
   } catch (err) {
     toast.error(err.message);
   }
 }
 
-watch(activeSociete, load, { immediate: true });
-watch(type, load);
+watch(activeSociete, () => load(), { immediate: true });
+watch(type, () => load());
 </script>
 
 <template>

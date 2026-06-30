@@ -3,10 +3,12 @@ import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
+const refCache = useRefCacheStore();
 
 const comptes = ref([]);
 const erreursImport = ref([]);
@@ -26,11 +28,13 @@ const comptesFiltres = computed(() => {
   );
 });
 
-async function load() {
+async function load(force = false) {
   if (!activeSociete.value) return;
   loading.value = true;
   try {
-    comptes.value = await api.get(`/api/comptes/${activeSociete.value.id}`);
+    const societeId = activeSociete.value.id;
+    if (force) refCache.invalidate(`comptes:${societeId}`);
+    comptes.value = await refCache.get(`comptes:${societeId}`, () => api.get(`/api/comptes/${societeId}`));
   } catch (err) {
     toast.error(err.message);
   } finally {
@@ -43,7 +47,7 @@ async function seed() {
   try {
     const res = await api.post(`/api/comptes/${activeSociete.value.id}/seed`);
     toast.success(`Plan comptable SYSCOHADA initialisé (${res.count} comptes).`);
-    await load();
+    await load(true);
   } catch (err) {
     toast.error(err.message);
   }
@@ -64,7 +68,7 @@ async function importerExcel() {
     toast.success(`Plan comptable importé (${res.count} comptes).`);
     fichierExcel.value = null;
     if (fichierInput.value) fichierInput.value.value = '';
-    await load();
+    await load(true);
   } catch (err) {
     toast.error(err.message);
     erreursImport.value = err.details || [];
@@ -83,13 +87,13 @@ async function ajouterCompte() {
     });
     toast.success(`Compte ${nouveauCompte.value.numero} créé.`);
     nouveauCompte.value = { numero: '', libelle: '', classe: 6 };
-    await load();
+    await load(true);
   } catch (err) {
     toast.error(err.message);
   }
 }
 
-watch(activeSociete, load, { immediate: true });
+watch(activeSociete, () => load(), { immediate: true });
 </script>
 
 <template>

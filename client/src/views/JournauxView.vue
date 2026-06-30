@@ -3,19 +3,23 @@ import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
+const refCache = useRefCacheStore();
 
 const journaux = ref([]);
 const loading = ref(false);
 
-async function load() {
+async function load(force = false) {
   if (!activeSociete.value) return;
   loading.value = true;
   try {
-    journaux.value = await api.get(`/api/journaux/${activeSociete.value.id}`);
+    const societeId = activeSociete.value.id;
+    if (force) refCache.invalidate(`journaux:${societeId}`);
+    journaux.value = await refCache.get(`journaux:${societeId}`, () => api.get(`/api/journaux/${societeId}`));
   } catch (err) {
     toast.error(err.message);
   } finally {
@@ -28,13 +32,13 @@ async function seed() {
   try {
     const res = await api.post(`/api/journaux/${activeSociete.value.id}/seed`);
     toast.success(`Journaux créés (${res.count}).`);
-    await load();
+    await load(true);
   } catch (err) {
     toast.error(err.message);
   }
 }
 
-watch(activeSociete, load, { immediate: true });
+watch(activeSociete, () => load(), { immediate: true });
 </script>
 
 <template>

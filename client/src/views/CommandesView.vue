@@ -4,11 +4,13 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
 import { useConfirmStore } from '../stores/confirm';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
 const confirmStore = useConfirmStore();
+const refCache = useRefCacheStore();
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -48,9 +50,10 @@ function compteLabel(numero) {
 async function loadRefs() {
   if (!activeSociete.value) return;
   try {
+    const societeId = activeSociete.value.id;
     [fournisseurs.value, comptes.value] = await Promise.all([
-      api.get(`/api/tiers/${activeSociete.value.id}?type=fournisseur`),
-      api.get(`/api/comptes/${activeSociete.value.id}`),
+      refCache.get(`tiers:${societeId}:fournisseur`, () => api.get(`/api/tiers/${societeId}?type=fournisseur`)),
+      refCache.get(`comptes:${societeId}`, () => api.get(`/api/comptes/${societeId}`)),
     ]);
   } catch (err) {
     toast.error(err.message);

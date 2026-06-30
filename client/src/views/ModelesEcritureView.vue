@@ -4,11 +4,13 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
 import { useConfirmStore } from '../stores/confirm';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
 const confirmStore = useConfirmStore();
+const refCache = useRefCacheStore();
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -52,9 +54,10 @@ const equilibreGeneration = computed(() => totalGeneration.value.debit === total
 async function loadRefs() {
   if (!activeSociete.value) return;
   try {
+    const societeId = activeSociete.value.id;
     [journaux.value, comptes.value] = await Promise.all([
-      api.get(`/api/journaux/${activeSociete.value.id}`),
-      api.get(`/api/comptes/${activeSociete.value.id}`),
+      refCache.get(`journaux:${societeId}`, () => api.get(`/api/journaux/${societeId}`)),
+      refCache.get(`comptes:${societeId}`, () => api.get(`/api/comptes/${societeId}`)),
     ]);
   } catch (err) {
     toast.error(err.message);

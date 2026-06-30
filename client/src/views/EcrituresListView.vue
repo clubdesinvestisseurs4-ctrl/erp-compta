@@ -4,11 +4,13 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
 import { useConfirmStore } from '../stores/confirm';
+import { useRefCacheStore } from '../stores/refCache';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
 const confirmStore = useConfirmStore();
+const refCache = useRefCacheStore();
 
 const journaux = ref([]);
 const ecritures = ref([]);
@@ -20,7 +22,8 @@ const filtreExercice = ref(null);
 
 async function loadJournaux() {
   if (!activeSociete.value) return;
-  journaux.value = await api.get(`/api/journaux/${activeSociete.value.id}`);
+  const societeId = activeSociete.value.id;
+  journaux.value = await refCache.get(`journaux:${societeId}`, () => api.get(`/api/journaux/${societeId}`));
 }
 
 async function load() {
