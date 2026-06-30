@@ -2,13 +2,16 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const journaux = ref([]);
 const ecritures = ref([]);
-const error = ref('');
 const loading = ref(false);
 const expanded = ref(new Set());
 
@@ -22,7 +25,6 @@ async function loadJournaux() {
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     const params = new URLSearchParams();
@@ -30,7 +32,7 @@ async function load() {
     params.set('exercice', filtreExercice.value);
     ecritures.value = await api.get(`/api/ecritures/${activeSociete.value.id}?${params.toString()}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -46,25 +48,28 @@ function toggle(id) {
 }
 
 async function exporterFec() {
-  error.value = '';
   try {
     await api.downloadFile(
       `/api/export/${activeSociete.value.id}/fec?exercice=${filtreExercice.value}`,
       `FEC_${activeSociete.value.id}_${filtreExercice.value}.txt`
     );
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function extourner(ecriture) {
-  if (!confirm(`Extourner (annuler) l'écriture ${ecriture.journalCode}-${ecriture.numero} ? Une écriture inverse sera générée.`)) return;
-  error.value = '';
+  const ok = await confirmStore.ask(
+    `Extourner (annuler) l'écriture ${ecriture.journalCode}-${ecriture.numero} ? Une écriture inverse sera générée.`,
+    { danger: true, confirmLabel: 'Extourner' }
+  );
+  if (!ok) return;
   try {
     await api.post(`/api/ecritures/${activeSociete.value.id}/${ecriture.id}/extourner`);
+    toast.success('Écriture extournée.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -80,8 +85,6 @@ watch(activeSociete, () => {
 <template>
   <div>
     <h1>Écritures {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <div class="card">
       <div class="form-row">

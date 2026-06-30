@@ -3,14 +3,15 @@ import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const router = useRouter();
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const journaux = ref([]);
 const comptes = ref([]);
-const error = ref('');
 const saving = ref(false);
 
 const today = new Date().toISOString().slice(0, 10);
@@ -64,21 +65,20 @@ async function loadRefs() {
       form.value.journalCode = journaux.value[0].code;
     }
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function onSubmit() {
-  error.value = '';
   if (!activeSociete.value) return;
 
   const lignesValides = lignes.value.filter(l => l.compte && (Number(l.debit) > 0 || Number(l.credit) > 0));
   if (lignesValides.length < 2) {
-    error.value = 'Renseignez au moins 2 lignes avec un compte et un montant.';
+    toast.error('Renseignez au moins 2 lignes avec un compte et un montant.');
     return;
   }
   if (!equilibre.value) {
-    error.value = `L'écriture est déséquilibrée : débit ${totalDebit.value} ≠ crédit ${totalCredit.value}.`;
+    toast.error(`L'écriture est déséquilibrée : débit ${totalDebit.value} ≠ crédit ${totalCredit.value}.`);
     return;
   }
 
@@ -96,9 +96,10 @@ async function onSubmit() {
         credit: Number(l.credit) || 0,
       })),
     });
+    toast.success('Écriture enregistrée.');
     router.push({ name: 'ecritures' });
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     saving.value = false;
   }
@@ -110,8 +111,6 @@ watch(activeSociete, loadRefs, { immediate: true });
 <template>
   <div>
     <h1>Nouvelle écriture {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <form class="card" @submit.prevent="onSubmit">
       <div class="form-row">

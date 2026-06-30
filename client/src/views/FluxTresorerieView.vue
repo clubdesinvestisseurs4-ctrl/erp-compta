@@ -2,23 +2,23 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const exercice = ref(null);
 const flux = ref(null);
-const error = ref('');
 const loading = ref(false);
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     flux.value = await api.get(`/api/rapports/${activeSociete.value.id}/flux-tresorerie?exercice=${exercice.value}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -35,8 +35,6 @@ watch(activeSociete, () => {
 <template>
   <div>
     <h1>Flux de trésorerie {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <div class="card">
       <div class="form-row">

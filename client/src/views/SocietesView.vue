@@ -2,10 +2,10 @@
 import { ref, onMounted } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
-const error = ref('');
-const success = ref('');
+const toast = useToastStore();
 const seeding = ref('');
 
 onMounted(() => {
@@ -13,51 +13,43 @@ onMounted(() => {
 });
 
 async function seedSocietes() {
-  error.value = '';
-  success.value = '';
   seeding.value = 'societes';
   try {
     await api.post('/api/societes/seed');
-    success.value = 'Sociétés créées (Ohinéné, Cook Africa).';
+    toast.success('Sociétés créées (Ohinéné, Cook Africa).');
     await societeStore.fetchSocietes();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     seeding.value = '';
   }
 }
 
 async function seedPlanComptable(societeId) {
-  error.value = '';
-  success.value = '';
   seeding.value = `plan-${societeId}`;
   try {
     const res = await api.post(`/api/comptes/${societeId}/seed`);
-    success.value = `Plan comptable SYSCOHADA initialisé pour ${societeId} (${res.count} comptes).`;
+    toast.success(`Plan comptable SYSCOHADA initialisé pour ${societeId} (${res.count} comptes).`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     seeding.value = '';
   }
 }
 
 async function seedJournaux(societeId) {
-  error.value = '';
-  success.value = '';
   seeding.value = `journaux-${societeId}`;
   try {
     const res = await api.post(`/api/journaux/${societeId}/seed`);
-    success.value = `Journaux créés pour ${societeId} (${res.count}).`;
+    toast.success(`Journaux créés pour ${societeId} (${res.count}).`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     seeding.value = '';
   }
 }
 
 async function updateSociete(societe) {
-  error.value = '';
-  success.value = '';
   try {
     await api.put(`/api/societes/${societe.id}`, {
       nom: societe.nom,
@@ -65,10 +57,10 @@ async function updateSociete(societe) {
       devise: societe.devise,
       exerciceCourant: Number(societe.exerciceCourant),
     });
-    success.value = `Société ${societe.nom} mise à jour.`;
+    toast.success(`Société ${societe.nom} mise à jour.`);
     await societeStore.fetchSocietes();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 </script>
@@ -76,9 +68,6 @@ async function updateSociete(societe) {
 <template>
   <div>
     <h1>Sociétés</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card" v-if="societeStore.societes.length === 0">
       <p>Aucune société initialisée.</p>

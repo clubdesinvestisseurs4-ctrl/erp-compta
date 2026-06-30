@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import { useSocieteStore } from './stores/societe';
 import AppHeader from './components/AppHeader.vue';
+import ToastContainer from './components/ToastContainer.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -33,6 +35,8 @@ watch(() => auth.isAuthenticated, (isAuth) => {
         </transition>
       </RouterView>
     </main>
+    <ToastContainer />
+    <ConfirmDialog />
   </div>
 </template>
 

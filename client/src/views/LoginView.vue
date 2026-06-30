@@ -2,23 +2,23 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { useToastStore } from '../stores/toast';
 
 const router = useRouter();
 const auth = useAuthStore();
+const toast = useToastStore();
 
 const username = ref('');
 const password = ref('');
-const error = ref('');
 const loading = ref(false);
 
 async function onSubmit() {
-  error.value = '';
   loading.value = true;
   try {
     await auth.login(username.value, password.value);
     router.push({ name: 'dashboard' });
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -30,8 +30,6 @@ async function onSubmit() {
     <form class="card login-card" @submit.prevent="onSubmit">
       <h1>ERP Compta</h1>
       <p class="muted">Ohinéné &amp; Cook Africa — Comptabilité SYSCOHADA</p>
-
-      <div v-if="error" class="error">{{ error }}</div>
 
       <label>
         Identifiant

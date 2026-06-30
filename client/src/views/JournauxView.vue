@@ -2,23 +2,22 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const journaux = ref([]);
-const error = ref('');
-const success = ref('');
 const loading = ref(false);
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     journaux.value = await api.get(`/api/journaux/${activeSociete.value.id}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -26,14 +25,12 @@ async function load() {
 
 async function seed() {
   if (!activeSociete.value) return;
-  error.value = '';
-  success.value = '';
   try {
     const res = await api.post(`/api/journaux/${activeSociete.value.id}/seed`);
-    success.value = `Journaux créés (${res.count}).`;
+    toast.success(`Journaux créés (${res.count}).`);
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -43,9 +40,6 @@ watch(activeSociete, load, { immediate: true });
 <template>
   <div>
     <h1>Journaux {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card" v-if="!loading && journaux.length === 0">
       <p>Aucun journal. Initialiser les journaux standards (AC, VE, BQ, CA, OD, AN) ?</p>

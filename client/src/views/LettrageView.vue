@@ -2,17 +2,19 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const type = ref('fournisseur');
 const tiersList = ref([]);
 const tiersId = ref('');
 const mouvements = ref([]);
 const selection = ref(new Set());
-const error = ref('');
-const success = ref('');
 const loading = ref(false);
 
 const compteSelectionne = computed(() => {
@@ -40,7 +42,6 @@ const peutLettrer = computed(() => selection.value.size >= 2 && totalSelection.v
 
 async function loadTiers() {
   if (!activeSociete.value) return;
-  error.value = '';
   tiersList.value = await api.get(`/api/tiers/${activeSociete.value.id}?type=${type.value}`);
   tiersId.value = '';
   mouvements.value = [];
@@ -48,14 +49,12 @@ async function loadTiers() {
 
 async function loadMouvements() {
   if (!activeSociete.value || !compteSelectionne.value) return;
-  error.value = '';
-  success.value = '';
   selection.value = new Set();
   loading.value = true;
   try {
     mouvements.value = await api.get(`/api/lettrage/${activeSociete.value.id}/${compteSelectionne.value}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -70,41 +69,36 @@ function toggle(m) {
 }
 
 async function lettrer() {
-  error.value = '';
-  success.value = '';
   const mvts = mouvements.value
     .filter(m => selection.value.has(cle(m)))
     .map(m => ({ ecritureId: m.ecritureId, ligneIndex: m.ligneIndex }));
   try {
     const res = await api.post(`/api/lettrage/${activeSociete.value.id}/${compteSelectionne.value}`, { mouvements: mvts });
-    success.value = `Lettre ${res.lettre} attribuée.`;
+    toast.success(`Lettre ${res.lettre} attribuée.`);
     await loadMouvements();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function lettrageAuto() {
-  error.value = '';
-  success.value = '';
   try {
     const res = await api.post(`/api/lettrage/${activeSociete.value.id}/${compteSelectionne.value}/auto`);
-    success.value = res.message;
+    toast.success(res.message);
     await loadMouvements();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function delettrer(lettre) {
-  if (!confirm(`Annuler le lettrage ${lettre} ?`)) return;
-  error.value = '';
-  success.value = '';
+  if (!(await confirmStore.ask(`Annuler le lettrage ${lettre} ?`, { danger: true, confirmLabel: 'Annuler le lettrage' }))) return;
   try {
     await api.delete(`/api/lettrage/${activeSociete.value.id}/${compteSelectionne.value}/${lettre}`);
+    toast.success(`Lettrage ${lettre} annulé.`);
     await loadMouvements();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -116,9 +110,6 @@ watch(tiersId, loadMouvements);
 <template>
   <div>
     <h1>Lettrage {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card">
       <div class="form-row">

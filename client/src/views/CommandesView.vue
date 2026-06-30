@@ -2,17 +2,19 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const today = new Date().toISOString().slice(0, 10);
 
 const commandes = ref([]);
 const fournisseurs = ref([]);
 const comptes = ref([]);
-const error = ref('');
-const success = ref('');
 const loading = ref(false);
 const saving = ref(false);
 const compteTresorerie = ref('521');
@@ -51,33 +53,30 @@ async function loadRefs() {
       api.get(`/api/comptes/${activeSociete.value.id}`),
     ]);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     commandes.value = await api.get(`/api/commandes/${activeSociete.value.id}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
 }
 
 async function creer() {
-  error.value = '';
-  success.value = '';
   if (!form.value.fournisseurId) {
-    error.value = 'Sélectionnez un fournisseur.';
+    toast.error('Sélectionnez un fournisseur.');
     return;
   }
   const lignesValides = lignes.value.filter(l => l.compte && Number(l.montant) > 0);
   if (lignesValides.length === 0) {
-    error.value = 'Ajoutez au moins une ligne avec un compte de charge et un montant.';
+    toast.error('Ajoutez au moins une ligne avec un compte de charge et un montant.');
     return;
   }
 
@@ -88,61 +87,55 @@ async function creer() {
       date: form.value.date,
       lignes: lignesValides.map(l => ({ compte: l.compte, libelle: l.libelle, montant: Number(l.montant) })),
     });
-    success.value = `Bon de commande ${res.numero} créé.`;
+    toast.success(`Bon de commande ${res.numero} créé.`);
     form.value = { fournisseurId: '', date: today };
     lignes.value = [{ compte: '', libelle: '', montant: '' }];
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     saving.value = false;
   }
 }
 
 async function valider(commande) {
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/commandes/${activeSociete.value.id}/${commande.id}/valider`);
-    success.value = 'Bon de commande validé.';
+    toast.success('Bon de commande validé.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function recevoir(commande) {
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/commandes/${activeSociete.value.id}/${commande.id}/recevoir`);
-    success.value = 'Réception comptabilisée.';
+    toast.success('Réception comptabilisée.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function payer(commande) {
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/commandes/${activeSociete.value.id}/${commande.id}/payer`, { compteTresorerie: compteTresorerie.value });
-    success.value = 'Paiement comptabilisé.';
+    toast.success('Paiement comptabilisé.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function supprimer(commande) {
-  if (!confirm(`Supprimer le bon de commande ${commande.numero} ?`)) return;
-  error.value = '';
+  if (!(await confirmStore.ask(`Supprimer le bon de commande ${commande.numero} ?`, { danger: true, confirmLabel: 'Supprimer' }))) return;
   try {
     await api.delete(`/api/commandes/${activeSociete.value.id}/${commande.id}`);
+    toast.success(`Bon de commande ${commande.numero} supprimé.`);
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -152,9 +145,6 @@ watch(activeSociete, () => { loadRefs(); load(); }, { immediate: true });
 <template>
   <div>
     <h1>Bons de commande {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <form class="card" @submit.prevent="creer">
       <h2>Nouveau bon de commande</h2>

@@ -2,22 +2,22 @@
 import { computed, ref, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const resultat = ref(null);
-const error = ref('');
 const loading = ref(false);
 
 async function loadResultat() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     resultat.value = await api.get(`/api/rapports/${activeSociete.value.id}/resultat?exercice=${activeSociete.value.exerciceCourant}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -42,8 +42,7 @@ watch(activeSociete, loadResultat, { immediate: true });
         </p>
       </div>
 
-      <div v-if="error" class="error">{{ error }}</div>
-      <div v-else-if="loading" class="card">Chargement...</div>
+      <div v-if="loading" class="card">Chargement...</div>
 
       <div v-else-if="resultat" class="card">
         <h2>Compte de résultat (synthèse)</h2>

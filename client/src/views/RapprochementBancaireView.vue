@@ -2,9 +2,11 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -15,7 +17,6 @@ const soldeComptable = ref(0);
 const soldeNonPointe = ref(0);
 const soldeTheoriqueReleve = ref(0);
 const soldeReleve = ref('');
-const error = ref('');
 const loading = ref(false);
 
 const ecart = computed(() => {
@@ -29,7 +30,6 @@ function round2(n) {
 
 async function load() {
   if (!activeSociete.value || !compte.value) return;
-  error.value = '';
   loading.value = true;
   try {
     const res = await api.get(`/api/rapprochement/${activeSociete.value.id}/${compte.value}?dateFin=${dateFin.value}`);
@@ -38,14 +38,13 @@ async function load() {
     soldeNonPointe.value = res.soldeNonPointe;
     soldeTheoriqueReleve.value = res.soldeTheoriqueReleve;
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
 }
 
 async function togglePointage(m) {
-  error.value = '';
   try {
     await api.post(`/api/rapprochement/${activeSociete.value.id}/${compte.value}/pointer`, {
       ecritureId: m.ecritureId,
@@ -54,7 +53,7 @@ async function togglePointage(m) {
     });
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -64,8 +63,6 @@ watch(activeSociete, load, { immediate: true });
 <template>
   <div>
     <h1>Rapprochement bancaire {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <div class="card">
       <div class="form-row">

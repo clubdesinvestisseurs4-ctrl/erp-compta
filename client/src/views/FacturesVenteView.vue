@@ -2,17 +2,19 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const today = new Date().toISOString().slice(0, 10);
 
 const factures = ref([]);
 const clients = ref([]);
 const comptes = ref([]);
-const error = ref('');
-const success = ref('');
 const loading = ref(false);
 const saving = ref(false);
 const compteTresorerie = ref('521');
@@ -51,33 +53,30 @@ async function loadRefs() {
       api.get(`/api/comptes/${activeSociete.value.id}`),
     ]);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     factures.value = await api.get(`/api/factures/${activeSociete.value.id}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
 }
 
 async function creer() {
-  error.value = '';
-  success.value = '';
   if (!form.value.clientId) {
-    error.value = 'Sélectionnez un client.';
+    toast.error('Sélectionnez un client.');
     return;
   }
   const lignesValides = lignes.value.filter(l => l.compte && Number(l.montant) > 0);
   if (lignesValides.length === 0) {
-    error.value = 'Ajoutez au moins une ligne avec un compte de produit et un montant.';
+    toast.error('Ajoutez au moins une ligne avec un compte de produit et un montant.');
     return;
   }
 
@@ -88,61 +87,55 @@ async function creer() {
       date: form.value.date,
       lignes: lignesValides.map(l => ({ compte: l.compte, libelle: l.libelle, montant: Number(l.montant) })),
     });
-    success.value = `Facture ${res.numero} créée.`;
+    toast.success(`Facture ${res.numero} créée.`);
     form.value = { clientId: '', date: today };
     lignes.value = [{ compte: '', libelle: '', montant: '' }];
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     saving.value = false;
   }
 }
 
 async function valider(facture) {
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/factures/${activeSociete.value.id}/${facture.id}/valider`);
-    success.value = 'Facture validée.';
+    toast.success('Facture validée.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function facturer(facture) {
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/factures/${activeSociete.value.id}/${facture.id}/facturer`);
-    success.value = 'Facture émise et comptabilisée.';
+    toast.success('Facture émise et comptabilisée.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function encaisser(facture) {
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/factures/${activeSociete.value.id}/${facture.id}/encaisser`, { compteTresorerie: compteTresorerie.value });
-    success.value = 'Encaissement comptabilisé.';
+    toast.success('Encaissement comptabilisé.');
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function supprimer(facture) {
-  if (!confirm(`Supprimer la facture ${facture.numero} ?`)) return;
-  error.value = '';
+  if (!(await confirmStore.ask(`Supprimer la facture ${facture.numero} ?`, { danger: true, confirmLabel: 'Supprimer' }))) return;
   try {
     await api.delete(`/api/factures/${activeSociete.value.id}/${facture.id}`);
+    toast.success(`Facture ${facture.numero} supprimée.`);
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -152,9 +145,6 @@ watch(activeSociete, () => { loadRefs(); load(); }, { immediate: true });
 <template>
   <div>
     <h1>Factures de vente {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <form class="card" @submit.prevent="creer">
       <h2>Nouvelle facture</h2>

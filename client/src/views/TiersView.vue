@@ -2,57 +2,56 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const type = ref('client');
 const tiersList = ref([]);
-const error = ref('');
-const success = ref('');
 const saving = ref(false);
 
 const form = ref({ nom: '', telephone: '', email: '', adresse: '' });
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   try {
     tiersList.value = await api.get(`/api/tiers/${activeSociete.value.id}?type=${type.value}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function ajouter() {
-  error.value = '';
-  success.value = '';
   if (!form.value.nom) {
-    error.value = 'Le nom est requis.';
+    toast.error('Le nom est requis.');
     return;
   }
 
   saving.value = true;
   try {
     const res = await api.post(`/api/tiers/${activeSociete.value.id}`, { type: type.value, ...form.value });
-    success.value = `${type.value === 'client' ? 'Client' : 'Fournisseur'} créé (compte ${res.compteNumero}).`;
+    toast.success(`${type.value === 'client' ? 'Client' : 'Fournisseur'} créé (compte ${res.compteNumero}).`);
     form.value = { nom: '', telephone: '', email: '', adresse: '' };
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     saving.value = false;
   }
 }
 
 async function supprimer(tiers) {
-  if (!confirm(`Supprimer ${tiers.nom} ?`)) return;
-  error.value = '';
+  if (!(await confirmStore.ask(`Supprimer ${tiers.nom} ?`, { danger: true, confirmLabel: 'Supprimer' }))) return;
   try {
     await api.delete(`/api/tiers/${activeSociete.value.id}/${tiers.id}`);
+    toast.success(`${tiers.nom} supprimé.`);
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -63,9 +62,6 @@ watch(type, load);
 <template>
   <div>
     <h1>Tiers {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card">
       <div class="form-row">

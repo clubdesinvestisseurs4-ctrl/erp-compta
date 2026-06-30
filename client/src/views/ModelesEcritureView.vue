@@ -2,17 +2,19 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const today = new Date().toISOString().slice(0, 10);
 
 const modeles = ref([]);
 const journaux = ref([]);
 const comptes = ref([]);
-const error = ref('');
-const success = ref('');
 const saving = ref(false);
 const generating = ref(false);
 
@@ -55,17 +57,16 @@ async function loadRefs() {
       api.get(`/api/comptes/${activeSociete.value.id}`),
     ]);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   try {
     modeles.value = await api.get(`/api/modeles/${activeSociete.value.id}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -77,15 +78,13 @@ function supprimerLigne(lignes, index) {
 }
 
 async function enregistrerModele() {
-  error.value = '';
-  success.value = '';
   if (!form.value.nom || !form.value.journalCode) {
-    error.value = 'Le nom et le journal sont requis.';
+    toast.error('Le nom et le journal sont requis.');
     return;
   }
   const lignesValides = lignesModele.value.filter(l => l.compte);
   if (lignesValides.length < 2) {
-    error.value = 'Renseignez au moins 2 lignes avec un compte.';
+    toast.error('Renseignez au moins 2 lignes avec un compte.');
     return;
   }
 
@@ -96,34 +95,32 @@ async function enregistrerModele() {
       journalCode: form.value.journalCode,
       lignes: lignesValides.map(l => ({ compte: l.compte, libelle: l.libelle, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0 })),
     });
-    success.value = `Modèle « ${form.value.nom} » enregistré.`;
+    toast.success(`Modèle « ${form.value.nom} » enregistré.`);
     form.value = { nom: '', journalCode: '' };
     lignesModele.value = [{ compte: '', libelle: '', debit: '', credit: '' }, { compte: '', libelle: '', debit: '', credit: '' }];
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     saving.value = false;
   }
 }
 
 async function supprimerModele(modele) {
-  if (!confirm(`Supprimer le modèle « ${modele.nom} » ?`)) return;
-  error.value = '';
+  if (!(await confirmStore.ask(`Supprimer le modèle « ${modele.nom} » ?`, { danger: true, confirmLabel: 'Supprimer' }))) return;
   try {
     await api.delete(`/api/modeles/${activeSociete.value.id}/${modele.id}`);
+    toast.success(`Modèle « ${modele.nom} » supprimé.`);
     if (modeleSelectionne.value && modeleSelectionne.value.id === modele.id) {
       modeleSelectionne.value = null;
     }
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
 function utiliser(modele) {
-  error.value = '';
-  success.value = '';
   modeleSelectionne.value = modele;
   dateGeneration.value = today;
   libelleGeneration.value = modele.nom;
@@ -131,15 +128,13 @@ function utiliser(modele) {
 }
 
 async function genererEcriture() {
-  error.value = '';
-  success.value = '';
   const lignesValides = lignesGeneration.value.filter(l => l.compte && (Number(l.debit) > 0 || Number(l.credit) > 0));
   if (lignesValides.length < 2) {
-    error.value = 'Renseignez au moins 2 lignes avec un compte et un montant.';
+    toast.error('Renseignez au moins 2 lignes avec un compte et un montant.');
     return;
   }
   if (!equilibreGeneration.value) {
-    error.value = `Écriture déséquilibrée : débit ${totalGeneration.value.debit} ≠ crédit ${totalGeneration.value.credit}.`;
+    toast.error(`Écriture déséquilibrée : débit ${totalGeneration.value.debit} ≠ crédit ${totalGeneration.value.credit}.`);
     return;
   }
 
@@ -150,10 +145,10 @@ async function genererEcriture() {
       libelle: libelleGeneration.value,
       lignes: lignesValides.map(l => ({ compte: l.compte, libelle: l.libelle, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0 })),
     });
-    success.value = `Écriture générée à partir du modèle « ${modeleSelectionne.value.nom} ».`;
+    toast.success(`Écriture générée à partir du modèle « ${modeleSelectionne.value.nom} ».`);
     modeleSelectionne.value = null;
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     generating.value = false;
   }
@@ -165,9 +160,6 @@ watch(activeSociete, () => { loadRefs(); load(); modeleSelectionne.value = null;
 <template>
   <div>
     <h1>Modèles d'écritures récurrentes {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card">
       <h2>Mes modèles</h2>

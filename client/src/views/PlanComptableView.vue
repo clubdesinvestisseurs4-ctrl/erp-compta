@@ -2,13 +2,13 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const comptes = ref([]);
-const error = ref('');
-const success = ref('');
 const erreursImport = ref([]);
 const loading = ref(false);
 const importing = ref(false);
@@ -28,12 +28,11 @@ const comptesFiltres = computed(() => {
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     comptes.value = await api.get(`/api/comptes/${activeSociete.value.id}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -41,14 +40,12 @@ async function load() {
 
 async function seed() {
   if (!activeSociete.value) return;
-  error.value = '';
-  success.value = '';
   try {
     const res = await api.post(`/api/comptes/${activeSociete.value.id}/seed`);
-    success.value = `Plan comptable SYSCOHADA initialisé (${res.count} comptes).`;
+    toast.success(`Plan comptable SYSCOHADA initialisé (${res.count} comptes).`);
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -58,20 +55,18 @@ function onFichierChange(e) {
 
 async function importerExcel() {
   if (!activeSociete.value || !fichierExcel.value) return;
-  error.value = '';
-  success.value = '';
   erreursImport.value = [];
   importing.value = true;
   try {
     const formData = new FormData();
     formData.append('fichier', fichierExcel.value);
     const res = await api.uploadFile(`/api/comptes/${activeSociete.value.id}/import`, formData);
-    success.value = `Plan comptable importé (${res.count} comptes).`;
+    toast.success(`Plan comptable importé (${res.count} comptes).`);
     fichierExcel.value = null;
     if (fichierInput.value) fichierInput.value.value = '';
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
     erreursImport.value = err.details || [];
   } finally {
     importing.value = false;
@@ -80,19 +75,17 @@ async function importerExcel() {
 
 async function ajouterCompte() {
   if (!activeSociete.value) return;
-  error.value = '';
-  success.value = '';
   try {
     await api.post(`/api/comptes/${activeSociete.value.id}`, {
       numero: nouveauCompte.value.numero.trim(),
       libelle: nouveauCompte.value.libelle.trim(),
       classe: Number(nouveauCompte.value.classe),
     });
-    success.value = `Compte ${nouveauCompte.value.numero} créé.`;
+    toast.success(`Compte ${nouveauCompte.value.numero} créé.`);
     nouveauCompte.value = { numero: '', libelle: '', classe: 6 };
     await load();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -103,13 +96,12 @@ watch(activeSociete, load, { immediate: true });
   <div>
     <h1>Plan comptable {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
 
-    <div v-if="error" class="error">
-      {{ error }}
-      <ul v-if="erreursImport.length">
+    <div v-if="erreursImport.length" class="error">
+      <p>Erreurs de validation du fichier importé :</p>
+      <ul>
         <li v-for="(e, i) in erreursImport" :key="i">{{ e }}</li>
       </ul>
     </div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card" v-if="!loading && comptes.length === 0">
       <p>Aucun compte. Initialiser le référentiel SYSCOHADA pour cette société ?</p>

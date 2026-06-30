@@ -2,18 +2,18 @@
 import { ref, onMounted } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
+const toast = useToastStore();
 
 const employes = ref([]);
-const error = ref('');
 
 async function load() {
-  error.value = '';
   try {
     employes.value = await api.get('/api/employes');
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -30,8 +30,6 @@ onMounted(() => {
 <template>
   <div>
     <h1>Personnel</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <p class="muted">
       Les employés sont créés et gérés dans l'application Gestion Employés — cette page n'en affiche

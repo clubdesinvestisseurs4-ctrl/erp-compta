@@ -4,9 +4,11 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { exportCsv } from '../utils/csv';
 import { optionsPeriode } from '../utils/periode';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const exercice = ref(null);
 const periodeChoisie = ref('annee');
@@ -14,7 +16,6 @@ const dateFin = ref('');
 const periodeDateDebut = ref('');
 const bilan = ref(null);
 const resultat = ref(null);
-const error = ref('');
 const loading = ref(false);
 
 const periodes = computed(() => optionsPeriode(exercice.value || new Date().getFullYear()));
@@ -30,7 +31,6 @@ function onPeriodeChange() {
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     // Le bilan est une photo cumulée depuis le début de l'exercice jusqu'à dateFin ; le compte de
@@ -41,7 +41,7 @@ async function load() {
       api.get(`/api/rapports/${activeSociete.value.id}/resultat?exercice=${exercice.value}&dateDebut=${periodeDateDebut.value}&dateFin=${dateFin.value}`),
     ]);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -77,8 +77,6 @@ watch(activeSociete, () => {
 <template>
   <div>
     <h1>Bilan / Compte de résultat {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <div class="card">
       <div class="form-row">

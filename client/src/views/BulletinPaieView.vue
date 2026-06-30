@@ -3,15 +3,16 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const route = useRoute();
 const router = useRouter();
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const fiche = ref(null);
 const societe = ref(null);
-const error = ref('');
 const loading = ref(false);
 
 const STATUTS = {
@@ -22,14 +23,13 @@ const STATUTS = {
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     const res = await api.get(`/api/paie/${activeSociete.value.id}/${route.params.id}`);
     fiche.value = res.fiche;
     societe.value = res.societe;
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -44,8 +44,7 @@ onMounted(load);
 
 <template>
   <div class="bulletin-page">
-    <div v-if="error" class="error">{{ error }}</div>
-    <p v-else-if="loading" class="muted">Chargement...</p>
+    <p v-if="loading" class="muted">Chargement...</p>
 
     <template v-else-if="fiche">
       <div class="actions no-print">

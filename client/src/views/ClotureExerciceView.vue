@@ -2,33 +2,31 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
+import { useConfirmStore } from '../stores/confirm';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
+const confirmStore = useConfirmStore();
 
 const exercice = ref(null);
 const apercu = ref(null);
-const error = ref('');
-const success = ref('');
 const simulating = ref(false);
 const executing = ref(false);
 
 function reset() {
   apercu.value = null;
-  error.value = '';
-  success.value = '';
 }
 
 async function simuler() {
   if (!activeSociete.value || !exercice.value) return;
-  error.value = '';
-  success.value = '';
   apercu.value = null;
   simulating.value = true;
   try {
     apercu.value = await api.get(`/api/cloture/${activeSociete.value.id}/simuler?exercice=${exercice.value}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     simulating.value = false;
   }
@@ -36,18 +34,20 @@ async function simuler() {
 
 async function confirmer() {
   if (!apercu.value) return;
-  if (!confirm(`Clôturer définitivement l'exercice ${apercu.value.exercice} ? Cette action est irréversible : elle génère l'écriture de résultat et les à-nouveaux ${apercu.value.exerciceSuivant}, puis verrouille l'exercice ${apercu.value.exercice}.`)) return;
+  const ok = await confirmStore.ask(
+    `Clôturer définitivement l'exercice ${apercu.value.exercice} ? Cette action est irréversible : elle génère l'écriture de résultat et les à-nouveaux ${apercu.value.exerciceSuivant}, puis verrouille l'exercice ${apercu.value.exercice}.`,
+    { title: 'Clôture d\'exercice', danger: true, confirmLabel: 'Clôturer' }
+  );
+  if (!ok) return;
 
-  error.value = '';
-  success.value = '';
   executing.value = true;
   try {
     const res = await api.post(`/api/cloture/${activeSociete.value.id}/executer`, { exercice: apercu.value.exercice });
-    success.value = `Exercice ${res.exercice} clôturé. Résultat net : ${res.resultatNet.toLocaleString('fr-FR')} (compte ${res.compteResultat || '—'}).`;
+    toast.success(`Exercice ${res.exercice} clôturé. Résultat net : ${res.resultatNet.toLocaleString('fr-FR')} (compte ${res.compteResultat || '—'}).`);
     apercu.value = null;
     await societeStore.fetchSocietes();
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     executing.value = false;
   }
@@ -62,9 +62,6 @@ watch(activeSociete, () => {
 <template>
   <div>
     <h1>Clôture d'exercice {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
 
     <div class="card">
       <div class="form-row">

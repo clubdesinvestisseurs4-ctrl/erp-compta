@@ -2,14 +2,15 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const periodeCourante = new Date().toISOString().slice(0, 7);
 
 const pointages = ref([]);
-const error = ref('');
 const periode = ref(periodeCourante);
 
 const totauxParEmploye = computed(() => {
@@ -24,11 +25,10 @@ const totauxParEmploye = computed(() => {
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   try {
     pointages.value = await api.get(`/api/pointages/${activeSociete.value.id}?periode=${periode.value}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   }
 }
 
@@ -39,8 +39,6 @@ watch(periode, load);
 <template>
   <div>
     <h1>Pointages {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <p class="muted">
       Pointages réels enregistrés via le scan QR dans l'application Gestion Employés (lecture seule).

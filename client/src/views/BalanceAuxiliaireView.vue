@@ -4,9 +4,11 @@ import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { exportCsv } from '../utils/csv';
 import { optionsPeriode } from '../utils/periode';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const type = ref('client');
 const exercice = ref(null);
@@ -14,7 +16,6 @@ const periodeChoisie = ref('annee');
 const dateDebut = ref('');
 const dateFin = ref('');
 const result = ref(null);
-const error = ref('');
 const loading = ref(false);
 
 const periodes = computed(() => optionsPeriode(exercice.value || new Date().getFullYear()));
@@ -30,12 +31,11 @@ function onPeriodeChange() {
 
 async function load() {
   if (!activeSociete.value) return;
-  error.value = '';
   loading.value = true;
   try {
     result.value = await api.get(`/api/rapports/${activeSociete.value.id}/balance-auxiliaire?type=${type.value}&exercice=${exercice.value}&dateDebut=${dateDebut.value}&dateFin=${dateFin.value}`);
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -67,8 +67,6 @@ watch(type, load);
 <template>
   <div>
     <h1>Balance auxiliaire {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <div class="card">
       <div class="form-row">

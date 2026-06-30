@@ -2,9 +2,11 @@
 import { ref, computed, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
+import { useToastStore } from '../stores/toast';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
+const toast = useToastStore();
 
 const today = new Date().toISOString().slice(0, 10);
 const debutMois = today.slice(0, 8) + '01';
@@ -12,12 +14,10 @@ const debutMois = today.slice(0, 8) + '01';
 const dateDebut = ref(debutMois);
 const dateFin = ref(today);
 const declaration = ref(null);
-const error = ref('');
 const loading = ref(false);
 
 async function calculer() {
   if (!activeSociete.value) return;
-  error.value = '';
   declaration.value = null;
   loading.value = true;
   try {
@@ -25,7 +25,7 @@ async function calculer() {
       `/api/rapports/${activeSociete.value.id}/declaration-tva?dateDebut=${dateDebut.value}&dateFin=${dateFin.value}`
     );
   } catch (err) {
-    error.value = err.message;
+    toast.error(err.message);
   } finally {
     loading.value = false;
   }
@@ -37,8 +37,6 @@ watch(activeSociete, () => { declaration.value = null; }, { immediate: true });
 <template>
   <div>
     <h1>Déclaration de TVA {{ activeSociete ? '— ' + activeSociete.nom : '' }}</h1>
-
-    <div v-if="error" class="error">{{ error }}</div>
 
     <div class="card">
       <div class="form-row">
