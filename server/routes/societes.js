@@ -22,7 +22,8 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json(societes);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -66,7 +67,8 @@ router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => 
     await ref.update(update);
     res.json({ message: 'Société mise à jour' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

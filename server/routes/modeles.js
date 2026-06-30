@@ -39,7 +39,8 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
     const modeles = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.nom.localeCompare(b.nom));
     res.json(modeles);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -99,7 +100,8 @@ router.put('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
     await ref.update(update);
     res.json({ message: 'Modèle mis à jour' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -115,7 +117,8 @@ router.delete('/:societeId/:id', authenticateToken, requireSocieteAccess, async 
     await ref.delete();
     res.json({ message: 'Modèle supprimé' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

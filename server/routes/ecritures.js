@@ -22,7 +22,8 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
 
     res.json(ecritures);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -35,7 +36,8 @@ router.get('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
     }
     res.json({ id: doc.id, ...doc.data() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -84,7 +86,8 @@ router.put('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
     await ref.update({ libelle, updatedBy: req.user.username, updatedAt: new Date().toISOString() });
     res.json({ message: 'Libellé mis à jour' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

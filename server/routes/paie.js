@@ -31,7 +31,8 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
 
     res.json(fiches);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -52,7 +53,8 @@ router.get('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
       societe: societeDoc.exists ? societeDoc.data() : null,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -248,7 +250,8 @@ router.delete('/:societeId/:id', authenticateToken, requireSocieteAccess, async 
     await ref.delete();
     res.json({ message: 'Fiche de paie supprimée' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

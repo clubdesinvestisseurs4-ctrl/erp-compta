@@ -59,7 +59,8 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
 
     res.json(commandes);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -73,7 +74,8 @@ router.get('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
     }
     res.json({ id: doc.id, ...doc.data() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -156,7 +158,8 @@ router.put('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
     await ref.update(update);
     res.json({ message: 'Bon de commande mis à jour' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -176,7 +179,8 @@ router.post('/:societeId/:id/valider', authenticateToken, requireSocieteAccess, 
     await ref.update({ statut: 'validee' });
     res.json({ message: 'Bon de commande validé' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -305,7 +309,8 @@ router.delete('/:societeId/:id', authenticateToken, requireSocieteAccess, async 
     await ref.delete();
     res.json({ message: 'Bon de commande supprimé' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

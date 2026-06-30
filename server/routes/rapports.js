@@ -192,7 +192,8 @@ router.get('/:societeId/grand-livre', authenticateToken, requireSocieteAccess, a
 
     res.json({ compte, soldeInitial, totalDebit, totalCredit, soldeFinal: solde, lignes });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -244,7 +245,8 @@ router.get('/:societeId/balance', authenticateToken, requireSocieteAccess, async
 
     res.json({ lignes: balance, totaux: totals });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -298,7 +300,8 @@ router.get('/:societeId/bilan', authenticateToken, requireSocieteAccess, async (
       equilibre: totalActif === totalPassif,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -349,7 +352,8 @@ router.get('/:societeId/resultat', authenticateToken, requireSocieteAccess, asyn
       resultatNet,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -403,7 +407,8 @@ router.get('/:societeId/balance-auxiliaire', authenticateToken, requireSocieteAc
 
     res.json({ lignes, totaux: totauxGlobaux });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -448,7 +453,8 @@ router.get('/:societeId/declaration-tva', authenticateToken, requireSocieteAcces
       sens: tvaNette >= 0 ? 'a_payer' : 'credit_a_reporter',
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -462,7 +468,8 @@ router.get('/:societeId/esg', authenticateToken, requireSocieteAccess, async (re
     const esg = await calculerESG(societeId, exercice, dateDebut, dateFin);
     res.json(esg);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

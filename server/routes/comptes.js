@@ -62,7 +62,8 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
 
     res.json(comptes);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -132,7 +133,8 @@ router.post('/:societeId', authenticateToken, requireSocieteAccess, async (req, 
     await ref.set({ societeId, numero: String(numero), libelle, classe: Number(classe) });
     res.status(201).json({ message: 'Compte créé' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -155,7 +157,8 @@ router.put('/:societeId/:numero', authenticateToken, requireSocieteAccess, async
     await ref.update({ libelle });
     res.json({ message: 'Compte mis à jour' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -171,7 +174,8 @@ router.delete('/:societeId/:numero', authenticateToken, requireSocieteAccess, as
     await ref.delete();
     res.json({ message: 'Compte supprimé' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

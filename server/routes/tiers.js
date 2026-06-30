@@ -38,7 +38,8 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
 
     res.json(tiers);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -111,7 +112,8 @@ router.put('/:societeId/:id', authenticateToken, requireSocieteAccess, async (re
 
     res.json({ message: 'Tiers mis à jour' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -139,7 +141,8 @@ router.delete('/:societeId/:id', authenticateToken, requireSocieteAccess, async 
 
     res.json({ message: 'Tiers supprimé' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 

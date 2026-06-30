@@ -48,7 +48,8 @@ router.get('/:societeId/:compte', authenticateToken, requireSocieteAccess, async
 
     res.json({ mouvements, soldeComptable, soldeNonPointe, soldeTheoriqueReleve });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
