@@ -1,6 +1,8 @@
 import { TOKEN_KEY, forceLogout } from '../utils/session';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002';
+// Tolère un VITE_API_BASE se terminant par "/" (sinon les requêtes partent en double slash,
+// ex: "https://host//api/societes" — certains bloqueurs de pub/proxys traitent ça comme suspect).
+const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3002').replace(/\/+$/, '');
 
 // Le login peut légitimement renvoyer 401 (identifiants invalides) sans que
 // l'utilisateur n'ait jamais eu de session — ne pas le traiter comme une expiration.
