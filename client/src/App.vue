@@ -1,9 +1,11 @@
 <script setup>
 import { onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import { useSocieteStore } from './stores/societe';
 import AppHeader from './components/AppHeader.vue';
 
+const route = useRoute();
 const auth = useAuthStore();
 const societeStore = useSocieteStore();
 
@@ -25,7 +27,11 @@ watch(() => auth.isAuthenticated, (isAuth) => {
   <div class="layout-vertical" :class="{ 'with-sidebar': auth.isAuthenticated }">
     <AppHeader v-if="auth.isAuthenticated" />
     <main class="content">
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </transition>
+      </RouterView>
     </main>
   </div>
 </template>
@@ -45,5 +51,20 @@ watch(() => auth.isAuthenticated, (isAuth) => {
   .layout-vertical.with-sidebar {
     flex-direction: column;
   }
+}
+</style>
+
+<style>
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>

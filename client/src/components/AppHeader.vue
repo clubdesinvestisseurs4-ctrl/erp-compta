@@ -124,10 +124,16 @@ function logout() {
   padding: 0.2rem 0.5rem;
   font-size: 1.1rem;
   cursor: pointer;
+  transition: transform 0.2s ease, background 0.15s ease;
 }
+
+.menu-toggle:hover { background: var(--color-primary-light); }
+
+.app-sidebar.menu-open .menu-toggle { transform: rotate(90deg); }
 
 .societe-select {
   width: 100%;
+  transition: opacity 0.2s ease;
 }
 
 .nav-links {
@@ -144,10 +150,12 @@ function logout() {
   padding: 0.4rem 0.5rem;
   border-radius: 4px;
   border-left: 3px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
 }
 
 .nav-links a:hover {
   background: var(--color-primary-light);
+  padding-left: 0.7rem;
 }
 
 .nav-links a.router-link-active {
@@ -186,21 +194,25 @@ function logout() {
   .societe-select,
   .nav-links,
   .sidebar-footer {
-    display: none;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: max-height 0.25s ease, opacity 0.2s ease;
   }
 
-  .app-sidebar.menu-open .societe-select {
-    display: block;
-  }
-
+  .app-sidebar.menu-open .societe-select,
   .app-sidebar.menu-open .nav-links,
   .app-sidebar.menu-open .sidebar-footer {
-    display: flex;
+    max-height: 1200px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
   }
 
   .nav-links {
     flex-direction: column;
-    overflow-y: visible;
+    display: flex;
   }
 
   .nav-links a.router-link-active {
