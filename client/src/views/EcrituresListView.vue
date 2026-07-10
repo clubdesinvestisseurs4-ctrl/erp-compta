@@ -20,6 +20,59 @@ const expanded = ref(new Set());
 const filtreJournal = ref('');
 const filtreExercice = ref(null);
 
+// ── Recherche ────────────────────────────────────────────────────────────────
+const rechercheTexte   = ref('');
+const filtreDateDebut  = ref('');
+const filtreDateFin    = ref('');
+const filtreMontantMin = ref('');
+const filtreMontantMax = ref('');
+const filtreCompte     = ref('');
+
+const rechercheActive = computed(() =>
+  rechercheTexte.value || filtreDateDebut.value || filtreDateFin.value ||
+  filtreMontantMin.value || filtreMontantMax.value || filtreCompte.value
+);
+
+function reinitialiserRecherche() {
+  rechercheTexte.value   = '';
+  filtreDateDebut.value  = '';
+  filtreDateFin.value    = '';
+  filtreMontantMin.value = '';
+  filtreMontantMax.value = '';
+  filtreCompte.value     = '';
+}
+
+const ecrituresFiltrees = computed(() => {
+  let liste = ecritures.value;
+
+  if (filtreDateDebut.value)
+    liste = liste.filter(e => e.date >= filtreDateDebut.value);
+  if (filtreDateFin.value)
+    liste = liste.filter(e => e.date <= filtreDateFin.value);
+  if (filtreMontantMin.value !== '')
+    liste = liste.filter(e => e.totalDebit >= Number(filtreMontantMin.value));
+  if (filtreMontantMax.value !== '')
+    liste = liste.filter(e => e.totalDebit <= Number(filtreMontantMax.value));
+  if (filtreCompte.value)
+    liste = liste.filter(e => e.lignes && e.lignes.some(l => l.compte && l.compte.startsWith(filtreCompte.value)));
+
+  const q = rechercheTexte.value.trim().toLowerCase();
+  if (q) {
+    liste = liste.filter(e => {
+      if ((e.libelle || '').toLowerCase().includes(q)) return true;
+      if (String(e.numero).includes(q)) return true;
+      if ((e.journalCode || '').toLowerCase().includes(q)) return true;
+      if (e.lignes && e.lignes.some(l =>
+        (l.libelle || '').toLowerCase().includes(q) ||
+        (l.compte  || '').toLowerCase().includes(q)
+      )) return true;
+      return false;
+    });
+  }
+
+  return liste;
+});
+
 async function loadJournaux() {
   if (!activeSociete.value) return;
   const societeId = activeSociete.value.id;
@@ -105,11 +158,52 @@ watch(activeSociete, () => {
         <RouterLink to="/ecritures/nouvelle" class="btn">+ Nouvelle écriture</RouterLink>
         <button class="btn secondary" @click="exporterFec">Exporter FEC</button>
       </div>
+
+      <!-- Barre de recherche -->
+      <div style="margin-top: 1rem; border-top: 1px solid var(--color-border, #e5e7eb); padding-top: 1rem;">
+        <div class="form-row" style="align-items: flex-end;">
+          <label style="flex: 2 1 260px;">
+            Recherche libre
+            <input
+              v-model="rechercheTexte"
+              type="text"
+              placeholder="Libellé, fournisseur, n° de compte, numéro écriture…"
+              style="width: 100%;"
+            />
+          </label>
+          <label>
+            Compte
+            <input v-model="filtreCompte" type="text" placeholder="ex. 604" style="width: 90px;" />
+          </label>
+          <label>
+            Du
+            <input v-model="filtreDateDebut" type="date" />
+          </label>
+          <label>
+            Au
+            <input v-model="filtreDateFin" type="date" />
+          </label>
+          <label>
+            Montant min
+            <input v-model.number="filtreMontantMin" type="number" placeholder="0" style="width: 110px;" />
+          </label>
+          <label>
+            Montant max
+            <input v-model.number="filtreMontantMax" type="number" placeholder="∞" style="width: 110px;" />
+          </label>
+          <button v-if="rechercheActive" class="btn secondary" @click="reinitialiserRecherche">
+            ✕ Réinitialiser
+          </button>
+        </div>
+        <p v-if="rechercheActive" style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--color-muted, #6b7280);">
+          <strong>{{ ecrituresFiltrees.length }}</strong> écriture(s) trouvée(s) sur {{ ecritures.length }}
+        </p>
+      </div>
     </div>
 
     <div class="card">
       <p v-if="loading" class="muted">Chargement...</p>
-      <table v-else-if="ecritures.length" class="table-cards">
+      <table v-else-if="ecrituresFiltrees.length" class="table-cards">
         <thead>
           <tr>
             <th>Date</th>
@@ -122,7 +216,7 @@ watch(activeSociete, () => {
           </tr>
         </thead>
         <tbody>
-          <template v-for="ec in ecritures" :key="ec.id">
+          <template v-for="ec in ecrituresFiltrees" :key="ec.id">
             <tr style="cursor: pointer;" @click="toggle(ec.id)">
               <td data-label="Date">{{ ec.date }}</td>
               <td data-label="Journal">{{ ec.journalCode }}</td>
@@ -159,6 +253,7 @@ watch(activeSociete, () => {
           </template>
         </tbody>
       </table>
+      <p v-else-if="rechercheActive" class="muted">Aucune écriture ne correspond à la recherche.</p>
       <p v-else class="muted">Aucune écriture pour ces critères.</p>
     </div>
   </div>
