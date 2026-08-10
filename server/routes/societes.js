@@ -28,8 +28,14 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // POST /api/societes/seed — crée les sociétés par défaut (Ohinéné, CookAfrica)
+// Même protection que POST /api/auth/seed (en-tête X-Seed-Token == SEED_TOKEN).
 router.post('/seed', async (req, res) => {
   try {
+    const seedToken = process.env.SEED_TOKEN;
+    if (!seedToken || req.headers['x-seed-token'] !== seedToken) {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+
     const snapshot = await db.collection('societes').limit(1).get();
     if (!snapshot.empty) {
       return res.status(409).json({ error: 'Sociétés déjà initialisées' });

@@ -70,8 +70,15 @@ router.get('/me', authenticateToken, (req, res) => {
 });
 
 // POST /api/auth/seed — crée les utilisateurs initiaux (à appeler une seule fois)
+// Protégé par un en-tête X-Seed-Token devant correspondre à la variable d'environnement
+// SEED_TOKEN du serveur — pas par un JWT (aucun compte n'existe encore avant ce seed).
 router.post('/seed', async (req, res) => {
   try {
+    const seedToken = process.env.SEED_TOKEN;
+    if (!seedToken || req.headers['x-seed-token'] !== seedToken) {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
+
     const snapshot = await db.collection('utilisateurs').limit(1).get();
     if (!snapshot.empty) {
       return res.status(409).json({ error: 'Base déjà initialisée' });

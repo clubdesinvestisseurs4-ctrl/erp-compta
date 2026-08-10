@@ -10,10 +10,11 @@ info:
     envoyé dans l'en-tête `Authorization: Bearer <token>`. Le token expire après 12h et
     embarque `societesAccess` (liste des sociétés autorisées).
 
-    Exception notable : `POST /api/auth/seed` et `POST /api/societes/seed` ne portent
-    **aucune protection** côté serveur (ni JWT, ni jeton dédié) — ils sont seulement
-    bloqués une fois les données déjà initialisées (409). Prévus pour un usage unique en
-    tout début de déploiement.
+    Exception : `POST /api/auth/seed` et `POST /api/societes/seed` ne portent pas de JWT —
+    ils sont protégés par un en-tête `X-Seed-Token` dédié (variable d'environnement
+    `SEED_TOKEN` du serveur) plutôt qu'un token utilisateur, puisqu'aucun compte n'existe
+    encore avant le tout premier seed. Prévus pour un usage unique en début de déploiement,
+    bloqués ensuite une fois les données déjà initialisées (409).
 
     ### Rôles et accès société
     Deux rôles : `admin` et `comptable`. `admin` a accès à toutes les sociétés et à toutes
@@ -183,10 +184,21 @@ paths:
       tags: [Auth]
       summary: Crée les 2 comptes staff par défaut, admin et comptable (une seule fois)
       description: |
-        Aucune authentification requise — à appeler une seule fois en tout début de
-        déploiement. Le comptable auto-échoue si des utilisateurs existent déjà en base.
+        Protégé par un en-tête `X-Seed-Token` devant correspondre à la variable
+        d'environnement `SEED_TOKEN` du serveur — pas par un JWT (aucun compte n'existe
+        encore avant ce seed). Échoue aussi si des utilisateurs existent déjà en base.
       security: []
+      parameters:
+        - name: X-Seed-Token
+          in: header
+          required: true
+          schema: { type: string }
       responses:
+        '403':
+          description: Jeton de seed manquant ou invalide
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '200':
           description: Utilisateurs créés
           content:
@@ -223,9 +235,21 @@ paths:
       operationId: postApiSocietesSeed
       tags: [Sociétés]
       summary: Crée les sociétés par défaut, Ohinéné et Cook Africa (une seule fois)
-      description: Aucune authentification requise — à appeler une seule fois en tout début de déploiement.
+      description: |
+        Protégé par un en-tête `X-Seed-Token` devant correspondre à la variable
+        d'environnement `SEED_TOKEN` du serveur — même mécanique que `POST /api/auth/seed`.
       security: []
+      parameters:
+        - name: X-Seed-Token
+          in: header
+          required: true
+          schema: { type: string }
       responses:
+        '403':
+          description: Jeton de seed manquant ou invalide
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '200':
           description: Sociétés créées
           content:
