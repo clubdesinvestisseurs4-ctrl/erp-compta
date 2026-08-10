@@ -1,0 +1,2704 @@
+openapi: 3.0.3
+info:
+  title: ERP Compta API
+  description: |
+    API backend de l'ERP de comptabilité générale SYSCOHADA multi-société, pour l'Hôtel
+    Ohinéné et Cook Africa (sociétés `ohinene` et `cookafrica`).
+
+    ### Authentification
+    La quasi-totalité des routes exigent un JWT Bearer obtenu via `POST /api/auth/login`,
+    envoyé dans l'en-tête `Authorization: Bearer <token>`. Le token expire après 12h et
+    embarque `societesAccess` (liste des sociétés autorisées).
+
+    Exception notable : `POST /api/auth/seed` et `POST /api/societes/seed` ne portent
+    **aucune protection** côté serveur (ni JWT, ni jeton dédié) — ils sont seulement
+    bloqués une fois les données déjà initialisées (409). Prévus pour un usage unique en
+    tout début de déploiement.
+
+    ### Rôles et accès société
+    Deux rôles : `admin` et `comptable`. `admin` a accès à toutes les sociétés et à toutes
+    les routes réservées (ex: exécution de clôture) ; `comptable` est restreint aux sociétés
+    listées dans `societesAccess` de son compte.
+
+    Sur toute route au format `/api/<module>/{societeId}/...`, le middleware
+    `requireSocieteAccess` vérifie que l'utilisateur a accès à `societeId` — 403 sinon
+    (401 si pas de token du tout, 403 si token valide mais société/rôle non autorisé).
+
+    ### Intégrations sortantes (lecture seule, pas exposées directement aux clients)
+    Certaines routes agrègent des données d'autres applications internes via un client
+    serveur-à-serveur authentifié par clé partagée (`X-Service-Key`), toujours en plus de
+    l'authentification JWT normale côté client ERP-Compta (l'appel sortant est invisible du
+    consommateur de cette API) :
+    - `App-Gestion-Employees` (source de vérité personnel/pointage/paie) : `GET /api/employes`,
+      `GET /api/pointages/{societeId}`, `POST /api/paie/{societeId}/generer`,
+      `POST /api/paie/{societeId}/{id}/payer`.
+    - `cookafrica-app`, endpoint `GET /api/integration/ca` (source de vérité du chiffre
+      d'affaires réel encaissé) : `GET /api/audit-flash/{societeId}`, réservé à la société
+      `cookafrica`.
+
+    Si l'application externe appelée est indisponible ou renvoie une erreur, ces routes
+    répondent **502** avec le message d'erreur remonté (sauf Audit Flash, qui répond 500 —
+    voir la description de cet endpoint).
+
+    ### Écritures comptables
+    Une écriture doit comporter au moins 2 lignes, chacune uniquement débitrice ou
+    créditrice (jamais les deux, jamais nulle, jamais négative), et le total des débits doit
+    égaler le total des crédits. Une écriture ne peut être ajoutée à un exercice déjà
+    clôturé (`exercicesClotures` de la société). Une écriture comptabilisée ne se corrige
+    jamais sur ses lignes/montants une fois créée : seul son libellé est modifiable
+    (`PUT /api/ecritures/{societeId}/{id}`), toute annulation d'effet passe par une
+    contre-passation (`POST /api/ecritures/{societeId}/{id}/extourner`).
+
+    ### Erreurs
+    Toutes les erreurs suivent le même format `{ "error": "message" }` (parfois complété
+    d'un tableau `details` pour les imports), avec le code HTTP approprié (400 validation,
+    401 non authentifié, 403 accès refusé, 404 introuvable, 409 conflit, 502 dépendance
+    externe indisponible, 500 erreur serveur).
+  version: 1.0.0
+  contact:
+    name: ERP Compta
+externalDocs:
+  description: README du dépôt
+  url: https://github.com/clubdesinvestisseurs4-ctrl/erp-compta
+
+servers:
+  - url: https://erp-compta-api-541617482949.us-central1.run.app
+    description: Production (Cloud Run)
+  - url: http://localhost:3002
+    description: Développement local
+
+tags:
+  - name: Auth
+    description: Connexion et session de l'utilisateur comptable
+  - name: Sociétés
+    description: Sociétés gérées par l'ERP (Ohinéné, Cook Africa)
+  - name: Plan comptable
+    description: Comptes SYSCOHADA par société — référentiel, import Excel, gestion manuelle
+  - name: Journaux
+    description: Journaux comptables par société (Achats, Ventes, Banque, Caisse, OD, À-Nouveaux)
+  - name: Écritures
+    description: Saisie, consultation et contre-passation des écritures comptables
+  - name: Rapports
+    description: Grand livre, balance, bilan, compte de résultat, TVA, ESG, flux de trésorerie
+  - name: Personnel
+    description: Employés (lecture seule, source de vérité App-Gestion-Employees)
+  - name: Pointages
+    description: Pointages réels par QR code (lecture seule, source de vérité App-Gestion-Employees)
+  - name: Paie
+    description: Fiches de paie — génération, validation et paiement comptabilisés
+  - name: Tiers
+    description: Clients et fournisseurs, avec leur compte auxiliaire dans le plan comptable
+  - name: Achats
+    description: Bons de commande fournisseurs — brouillon, validation, réception, paiement
+  - name: Ventes
+    description: Factures de vente clients — brouillon, validation, émission, encaissement
+  - name: Clôture
+    description: Clôture d'exercice comptable (résultat + à-nouveaux)
+  - name: Lettrage
+    description: Lettrage des mouvements d'un compte (manuel ou automatique)
+  - name: Rapprochement bancaire
+    description: Pointage des mouvements d'un compte de trésorerie face à un relevé
+  - name: Export
+    description: Export du Fichier des Écritures Comptables (FEC)
+  - name: Modèles
+    description: Modèles d'écritures récurrentes
+  - name: Audit Flash
+    description: Croisement CA réel / versements / charges pour Cook Africa (lecture seule)
+  - name: Système
+    description: Health check
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Système]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service opérationnel
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  timestamp: { type: string, format: date-time }
+                  service: { type: string, example: ERP Compta API }
+
+  # ── Auth ──────────────────────────────────────────────
+  /api/auth/login:
+    post:
+      operationId: postApiAuthLogin
+      tags: [Auth]
+      summary: Connexion
+      description: Limité à 10 tentatives / 15 min par IP (rate limit global sur cette route).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: admin }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Connexion réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user: { $ref: '#/components/schemas/UserPublic' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/me:
+    get:
+      operationId: getApiAuthMe
+      tags: [Auth]
+      summary: Informations sur l'utilisateur connecté (contenu décodé du JWT)
+      responses:
+        '200':
+          description: Utilisateur courant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/UserPublic' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/seed:
+    post:
+      operationId: postApiAuthSeed
+      tags: [Auth]
+      summary: Crée les 2 comptes staff par défaut, admin et comptable (une seule fois)
+      description: |
+        Aucune authentification requise — à appeler une seule fois en tout début de
+        déploiement. Le comptable auto-échoue si des utilisateurs existent déjà en base.
+      security: []
+      responses:
+        '200':
+          description: Utilisateurs créés
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  count: { type: integer, example: 2 }
+        '409':
+          description: Base déjà initialisée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Sociétés ──────────────────────────────────────────
+  /api/societes:
+    get:
+      operationId: getApiSocietes
+      tags: [Sociétés]
+      summary: Sociétés accessibles à l'utilisateur connecté
+      description: Un `admin` voit toutes les sociétés ; un `comptable` ne voit que celles listées dans `societesAccess`.
+      responses:
+        '200':
+          description: Liste des sociétés
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Societe' }
+
+  /api/societes/seed:
+    post:
+      operationId: postApiSocietesSeed
+      tags: [Sociétés]
+      summary: Crée les sociétés par défaut, Ohinéné et Cook Africa (une seule fois)
+      description: Aucune authentification requise — à appeler une seule fois en tout début de déploiement.
+      security: []
+      responses:
+        '200':
+          description: Sociétés créées
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  count: { type: integer, example: 2 }
+        '409':
+          description: Sociétés déjà initialisées
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/societes/{id}:
+    put:
+      operationId: putApiSocietesById
+      tags: [Sociétés]
+      summary: Modifier une société (admin uniquement)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifiant de la société (ex. `ohinene`, `cookafrica`)
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SocieteUpdateRequest' }
+      responses:
+        '200':
+          description: Société mise à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Plan comptable ────────────────────────────────────
+  /api/comptes/{societeId}:
+    get:
+      operationId: getApiComptesBySocieteId
+      tags: [Plan comptable]
+      summary: Plan comptable de la société, trié par numéro
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      responses:
+        '200':
+          description: Liste des comptes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Compte' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiComptesBySocieteId
+      tags: [Plan comptable]
+      summary: Ajoute un compte spécifique à la société
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompteCreateRequest' }
+      responses:
+        '201':
+          description: Compte créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Ce compte existe déjà
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/comptes/{societeId}/seed:
+    post:
+      operationId: postApiComptesBySocieteIdSeed
+      tags: [Plan comptable]
+      summary: Copie le référentiel SYSCOHADA complet pour la société
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      responses:
+        '200':
+          description: Plan comptable initialisé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  count: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Plan comptable déjà initialisé pour cette société
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/comptes/{societeId}/import:
+    post:
+      operationId: postApiComptesBySocieteIdImport
+      tags: [Plan comptable]
+      summary: Importe un plan comptable spécifique depuis un fichier Excel (.xlsx)
+      description: |
+        Colonnes attendues en première ligne : Numéro, Libellé, Classe (optionnelle, déduite
+        du 1er chiffre du numéro sinon). Les comptes du fichier sont créés ou mis à jour
+        (libellé/classe) ; les comptes existants absents du fichier sont conservés.
+        Fichier limité à 2 Mo.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [fichier]
+              properties:
+                fichier:
+                  type: string
+                  format: binary
+                  description: Fichier .xlsx, 2 Mo maximum
+      responses:
+        '200':
+          description: Plan comptable importé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  count: { type: integer }
+        '400':
+          description: Fichier manquant, trop volumineux, illisible, ou contenant des lignes invalides
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  details:
+                    type: array
+                    description: Présent si le fichier contient des lignes invalides — un message par ligne fautive
+                    items: { type: string }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/comptes/{societeId}/{numero}:
+    put:
+      operationId: putApiComptesBySocieteIdAndNumero
+      tags: [Plan comptable]
+      summary: Modifie le libellé d'un compte
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/NumeroPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [libelle]
+              properties:
+                libelle: { type: string }
+      responses:
+        '200':
+          description: Compte mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteApiComptesBySocieteIdAndNumero
+      tags: [Plan comptable]
+      summary: Supprime un compte du plan comptable
+      description: Aucune vérification d'usage dans des écritures n'est effectuée côté serveur pour cette route (contrairement à `DELETE /api/tiers/{societeId}/{id}`).
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/NumeroPathParam'
+      responses:
+        '200':
+          description: Compte supprimé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Journaux ──────────────────────────────────────────
+  /api/journaux/{societeId}:
+    get:
+      operationId: getApiJournauxBySocieteId
+      tags: [Journaux]
+      summary: Journaux de la société, triés par code
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      responses:
+        '200':
+          description: Liste des journaux
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Journal' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/journaux/{societeId}/seed:
+    post:
+      operationId: postApiJournauxBySocieteIdSeed
+      tags: [Journaux]
+      summary: Crée les 6 journaux par défaut pour la société (AC, VE, BQ, CA, OD, AN)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      responses:
+        '200':
+          description: Journaux créés
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  count: { type: integer, example: 6 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Journaux déjà initialisés pour cette société
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Écritures ─────────────────────────────────────────
+  /api/ecritures/{societeId}:
+    get:
+      operationId: getApiEcrituresBySocieteId
+      tags: [Écritures]
+      summary: Écritures de la société, triées par date décroissante puis numéro décroissant
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: journal
+          in: query
+          description: Filtre sur le code journal (ex. `AC`)
+          schema: { type: string }
+        - name: exercice
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Liste des écritures
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Ecriture' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiEcrituresBySocieteId
+      tags: [Écritures]
+      summary: Crée une écriture comptable
+      description: |
+        `journalCode`, `date`, `libelle` et `exercice` sont requis. Voir la section
+        "Écritures comptables" de la description générale pour les règles de validation
+        des lignes — toute violation (déséquilibre, journal ou compte inconnu, exercice
+        clôturé, etc.) renvoie **400** avec le message d'erreur précis.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EcritureCreateRequest' }
+      responses:
+        '201':
+          description: Écriture créée et numérotée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ecriture' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/ecritures/{societeId}/{id}:
+    get:
+      operationId: getApiEcrituresBySocieteIdAndId
+      tags: [Écritures]
+      summary: Détail d'une écriture
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Écriture
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ecriture' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putApiEcrituresBySocieteIdAndId
+      tags: [Écritures]
+      summary: Modifie uniquement le libellé d'une écriture
+      description: |
+        Une écriture comptabilisée ne se corrige jamais sur ses lignes/montants : voir
+        `POST /{id}/extourner` pour annuler son effet.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [libelle]
+              properties:
+                libelle: { type: string }
+      responses:
+        '200':
+          description: Libellé mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: L'exercice de l'écriture est clôturé — elle est verrouillée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/ecritures/{societeId}/{id}/extourner:
+    post:
+      operationId: postApiEcrituresBySocieteIdAndIdExtourner
+      tags: [Écritures]
+      summary: Contre-passation — crée une écriture miroir (débit/crédit inversés)
+      description: |
+        Seul moyen d'annuler l'effet d'une écriture existante. Marque l'originale comme
+        extournée (`extourneeParId`) ; `date` (défaut aujourd'hui) et `journalCode` (défaut
+        le journal de l'écriture d'origine) sont optionnels.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string, format: date }
+                journalCode: { type: string }
+      responses:
+        '200':
+          description: Écriture extournée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400':
+          description: Échec de création de l'écriture miroir (ex. exercice de la date d'extourne clôturé)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Cette écriture a déjà été extournée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Rapports ──────────────────────────────────────────
+  /api/rapports/{societeId}/grand-livre:
+    get:
+      operationId: getApiRapportsBySocieteIdGrandLivre
+      tags: [Rapports]
+      summary: Grand livre d'un compte (mouvements + solde progressif)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: compte
+          in: query
+          required: true
+          schema: { type: string }
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: dateDebut
+          in: query
+          description: Restreint l'affichage des mouvements à partir de cette date (le solde initial cumule tout ce qui précède)
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Grand livre du compte
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrandLivre' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/balance:
+    get:
+      operationId: getApiRapportsBySocieteIdBalance
+      tags: [Rapports]
+      summary: Balance générale des comptes mouvementés sur la période
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: dateDebut
+          in: query
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Balance générale
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Balance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/bilan:
+    get:
+      operationId: getApiRapportsBySocieteIdBilan
+      tags: [Rapports]
+      summary: Bilan — Actif / Passif (comptes de classes 1 à 5)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: dateDebut
+          in: query
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Bilan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Bilan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/resultat:
+    get:
+      operationId: getApiRapportsBySocieteIdResultat
+      tags: [Rapports]
+      summary: Compte de résultat — Charges / Produits (comptes de classes 6 et 7)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: dateDebut
+          in: query
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Compte de résultat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resultat' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/balance-auxiliaire:
+    get:
+      operationId: getApiRapportsBySocieteIdBalanceAuxiliaire
+      tags: [Rapports]
+      summary: Balance auxiliaire clients ou fournisseurs
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: type
+          in: query
+          required: true
+          schema: { type: string, enum: [client, fournisseur] }
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: dateDebut
+          in: query
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Balance auxiliaire
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BalanceAuxiliaire' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/declaration-tva:
+    get:
+      operationId: getApiRapportsBySocieteIdDeclarationTva
+      tags: [Rapports]
+      summary: TVA collectée (compte 443/4431) moins TVA déductible (comptes 4452/4454/4456) sur une période
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: dateDebut
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Déclaration de TVA
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeclarationTva' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/esg:
+    get:
+      operationId: getApiRapportsBySocieteIdEsg
+      tags: [Rapports]
+      summary: État des Soldes de Gestion (SYSCOHADA)
+      description: |
+        Adapté au plan comptable réduit de cette application (pas de compte de variation de
+        stock ni de production stockée/immobilisée : ces lignes restent à 0 par construction).
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: dateDebut
+          in: query
+          schema: { type: string, format: date }
+        - name: dateFin
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: État des Soldes de Gestion
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Esg' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapports/{societeId}/flux-tresorerie:
+    get:
+      operationId: getApiRapportsBySocieteIdFluxTresorerie
+      tags: [Rapports]
+      summary: Tableau des flux de trésorerie simplifié (méthode indirecte, inspiré du TAFIRE)
+      description: |
+        Compare l'exercice demandé à l'exercice précédent pour reconstituer les flux
+        d'exploitation, d'investissement et de financement. À considérer comme indicatif,
+        pas comme le TAFIRE normalisé complet (qui détaille des sous-catégories que le plan
+        comptable réduit de cette appli ne distingue pas).
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Flux de trésorerie
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FluxTresorerie' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ── Personnel / Pointages ─────────────────────────────
+  /api/employes:
+    get:
+      operationId: getApiEmployes
+      tags: [Personnel]
+      summary: Liste des employés
+      description: |
+        Source de vérité : App-Gestion-Employees (appel serveur-à-serveur en lecture seule).
+        La création/modification des employés se fait exclusivement dans cette autre
+        application. Un `comptable` ne voit que les employés dont un établissement figure
+        dans son `societesAccess`.
+      parameters:
+        - name: etablissement
+          in: query
+          description: Filtre transmis tel quel à App-Gestion-Employees
+          schema: { type: string }
+      responses:
+        '200':
+          description: Liste des employés (schéma défini par App-Gestion-Employees)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Employe' }
+        '502':
+          description: App-Gestion-Employees indisponible ou en erreur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/pointages/{societeId}:
+    get:
+      operationId: getApiPointagesBySocieteId
+      tags: [Pointages]
+      summary: Pointages réels (scan QR) de la société
+      description: |
+        Lecture seule — source de vérité App-Gestion-Employees. Plus de saisie/correction
+        manuelle des pointages côté ERP-Compta.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: periode
+          in: query
+          description: Format `YYYY-MM`
+          schema: { type: string, example: '2026-08' }
+      responses:
+        '200':
+          description: Liste des pointages (schéma défini par App-Gestion-Employees)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Pointage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '502':
+          description: App-Gestion-Employees indisponible ou en erreur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Paie ──────────────────────────────────────────────
+  /api/paie/{societeId}:
+    get:
+      operationId: getApiPaieBySocieteId
+      tags: [Paie]
+      summary: Fiches de paie de la société, triées par période décroissante puis nom
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: periode
+          in: query
+          description: Format `YYYY-MM`
+          schema: { type: string, example: '2026-08' }
+      responses:
+        '200':
+          description: Liste des fiches de paie
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FichePaie' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/paie/{societeId}/{id}:
+    get:
+      operationId: getApiPaieBySocieteIdAndId
+      tags: [Paie]
+      summary: Détail d'une fiche de paie (pour affichage du bulletin)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Fiche de paie et société associée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fiche: { $ref: '#/components/schemas/FichePaie' }
+                  societe: { $ref: '#/components/schemas/Societe' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteApiPaieBySocieteIdAndId
+      tags: [Paie]
+      summary: Supprime une fiche de paie en brouillon
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Fiche supprimée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Seules les fiches en brouillon peuvent être supprimées
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/paie/{societeId}/generer:
+    post:
+      operationId: postApiPaieBySocieteIdGenerer
+      tags: [Paie]
+      summary: Génère les fiches de paie brouillon de la période
+      description: |
+        Calcul officiel délégué à App-Gestion-Employees (pointages réels + congés payés +
+        avances). Ignore silencieusement les employés qui ont déjà une fiche pour cette
+        période — répond alors `fiches: []` avec un message explicite plutôt qu'une erreur.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [periode]
+              properties:
+                periode: { type: string, example: '2026-08', description: Format YYYY-MM }
+      responses:
+        '200':
+          description: Fiches générées (ou aucune à générer — voir `message`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  fiches:
+                    type: array
+                    items: { $ref: '#/components/schemas/FichePaie' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '502':
+          description: App-Gestion-Employees indisponible ou en erreur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/paie/{societeId}/{id}/valider:
+    post:
+      operationId: postApiPaieBySocieteIdAndIdValider
+      tags: [Paie]
+      summary: Comptabilise la charge de salaire brut (débit 661 / crédit 422)
+      description: |
+        L'avance déduite (si applicable) reste une information RH affichée sur le bulletin,
+        sans écriture comptable dédiée à ce stade (décision explicite, pour ne pas
+        introduire un compte d'avances jamais débité à l'origine côté compta).
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Fiche validée et comptabilisée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400':
+          description: Échec de création de l'écriture (voir la section "Écritures comptables")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Cette fiche a déjà été validée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/paie/{societeId}/{id}/payer:
+    post:
+      operationId: postApiPaieBySocieteIdAndIdPayer
+      tags: [Paie]
+      summary: Comptabilise le paiement du salaire (débit 422 / crédit trésorerie)
+      description: |
+        `compteTresorerie` requis — le journal (Caisse `CA` ou Banque `BQ`) est déduit
+        automatiquement selon que ce compte commence par `57`. Si `avanceDeduite > 0`,
+        notifie aussi App-Gestion-Employees pour solder l'avance côté RH.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [compteTresorerie]
+              properties:
+                compteTresorerie: { type: string, example: '571' }
+                date: { type: string, format: date, description: Défaut = dernier jour du mois de la période }
+      responses:
+        '200':
+          description: Paiement comptabilisé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La fiche doit être validée avant le paiement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: Échec de la mise à jour du solde d'avance côté App-Gestion-Employees
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Tiers ─────────────────────────────────────────────
+  /api/tiers/{societeId}:
+    get:
+      operationId: getApiTiersBySocieteId
+      tags: [Tiers]
+      summary: Tiers (clients et/ou fournisseurs) de la société, triés par nom
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: type
+          in: query
+          schema: { type: string, enum: [client, fournisseur] }
+      responses:
+        '200':
+          description: Liste des tiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Tiers' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiTiersBySocieteId
+      tags: [Tiers]
+      summary: Crée un tiers et son compte auxiliaire dans le plan comptable
+      description: |
+        Le numéro de compte auxiliaire est généré automatiquement (`411xxx` pour un client,
+        `401xxx` pour un fournisseur) et ajouté au plan comptable de la société.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TiersCreateRequest' }
+      responses:
+        '201':
+          description: Tiers créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tiers' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/tiers/{societeId}/{id}:
+    put:
+      operationId: putApiTiersBySocieteIdAndId
+      tags: [Tiers]
+      summary: Modifie un tiers
+      description: Un changement de `nom` répercute aussi le libellé du compte auxiliaire associé dans le plan comptable.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TiersUpdateRequest' }
+      responses:
+        '200':
+          description: Tiers mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteApiTiersBySocieteIdAndId
+      tags: [Tiers]
+      summary: Supprime un tiers et son compte auxiliaire
+      description: Refusé si le compte auxiliaire a des mouvements dans des écritures existantes.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Tiers supprimé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Ce compte est utilisé dans des écritures
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Achats ────────────────────────────────────────────
+  /api/commandes/{societeId}:
+    get:
+      operationId: getApiCommandesBySocieteId
+      tags: [Achats]
+      summary: Bons de commande fournisseurs de la société
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: statut
+          in: query
+          schema: { $ref: '#/components/schemas/StatutBonCommande' }
+      responses:
+        '200':
+          description: Liste des bons de commande
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BonCommande' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiCommandesBySocieteId
+      tags: [Achats]
+      summary: Crée un bon de commande en brouillon
+      description: Aucune écriture comptable n'est générée à la création — voir `POST /{id}/recevoir`.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BonCommandeCreateRequest' }
+      responses:
+        '201':
+          description: Bon de commande créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BonCommande' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/commandes/{societeId}/{id}:
+    get:
+      operationId: getApiCommandesBySocieteIdAndId
+      tags: [Achats]
+      summary: Détail d'un bon de commande
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Bon de commande
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BonCommande' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putApiCommandesBySocieteIdAndId
+      tags: [Achats]
+      summary: Modifie un bon de commande en brouillon
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BonCommandeUpdateRequest' }
+      responses:
+        '200':
+          description: Bon de commande mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Seuls les bons en brouillon peuvent être modifiés
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      operationId: deleteApiCommandesBySocieteIdAndId
+      tags: [Achats]
+      summary: Supprime un bon de commande en brouillon
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Bon de commande supprimé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Seuls les bons en brouillon peuvent être supprimés
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/commandes/{societeId}/{id}/valider:
+    post:
+      operationId: postApiCommandesBySocieteIdAndIdValider
+      tags: [Achats]
+      summary: "Confirme le bon de commande (aucune écriture comptable : pas encore de dette)"
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Bon de commande validé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Ce bon de commande a déjà été validé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/commandes/{societeId}/{id}/recevoir:
+    post:
+      operationId: postApiCommandesBySocieteIdAndIdRecevoir
+      tags: [Achats]
+      summary: Comptabilise la réception (débit comptes de charge / crédit 401 fournisseur)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string, format: date, description: Défaut = aujourd'hui }
+      responses:
+        '200':
+          description: Réception comptabilisée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400':
+          description: Échec de création de l'écriture (voir la section "Écritures comptables")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Le bon de commande doit être validé avant la réception
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/commandes/{societeId}/{id}/payer:
+    post:
+      operationId: postApiCommandesBySocieteIdAndIdPayer
+      tags: [Achats]
+      summary: Comptabilise le paiement (débit 401 fournisseur / crédit trésorerie)
+      description: Le journal (Caisse `CA` ou Banque `BQ`) est déduit automatiquement selon que `compteTresorerie` commence par `57`.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [compteTresorerie]
+              properties:
+                compteTresorerie: { type: string, example: '521' }
+                date: { type: string, format: date, description: Défaut = aujourd'hui }
+      responses:
+        '200':
+          description: Paiement comptabilisé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Le bon de commande doit être reçu avant le paiement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Clôture ───────────────────────────────────────────
+  /api/cloture/{societeId}/simuler:
+    get:
+      operationId: getApiClotureBySocieteIdSimuler
+      tags: [Clôture]
+      summary: Aperçu de la clôture d'exercice, sans aucune écriture en base
+      description: |
+        Calcule les lignes de détermination du résultat (soldes des comptes de classes 6/7)
+        et les à-nouveaux (soldes des comptes de classes 1 à 5) qui seraient générés par
+        `POST /executer`, sans rien écrire.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Aperçu de clôture
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClotureApercu' }
+        '400':
+          description: exercice manquant, société introuvable, exercice déjà clôturé, ou à-nouveaux calculés déséquilibrés
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/cloture/{societeId}/executer:
+    post:
+      operationId: postApiClotureBySocieteIdExecuter
+      tags: [Clôture]
+      summary: Clôture réelle et irréversible de l'exercice (admin uniquement)
+      description: |
+        Crée l'écriture de détermination du résultat (journal `OD`, si au moins 2 lignes),
+        crée l'écriture des à-nouveaux sur l'exercice suivant (journal `AN`, si au moins 2
+        lignes), ajoute l'exercice à `exercicesClotures` de la société et avance
+        `exerciceCourant` si nécessaire.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [exercice]
+              properties:
+                exercice: { type: integer }
+      responses:
+        '200':
+          description: Exercice clôturé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClotureResultat' }
+        '400':
+          description: exercice manquant, société introuvable, exercice déjà clôturé, ou à-nouveaux calculés déséquilibrés
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: Accès refusé (rôle `admin` requis, ou hors accès société)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Lettrage ──────────────────────────────────────────
+  /api/lettrage/{societeId}/{compte}:
+    get:
+      operationId: getApiLettrageBySocieteIdAndCompte
+      tags: [Lettrage]
+      summary: Tous les mouvements du compte, lettrés et non lettrés
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/CompteAuxPathParam'
+      responses:
+        '200':
+          description: Mouvements du compte
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MouvementLettrage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiLettrageBySocieteIdAndCompte
+      tags: [Lettrage]
+      summary: Lettrage manuel d'une sélection de mouvements équilibrée
+      description: |
+        Purement déclaratif — ne modifie ni le débit/crédit ni le compte d'une ligne, donc
+        reste autorisé même sur un exercice clôturé. Au moins 2 mouvements requis, dont la
+        somme débit − crédit doit être exactement nulle.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/CompteAuxPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mouvements]
+              properties:
+                mouvements:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: object
+                    required: [ecritureId, ligneIndex]
+                    properties:
+                      ecritureId: { type: string }
+                      ligneIndex: { type: integer }
+      responses:
+        '200':
+          description: Lettre attribuée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  lettre: { type: string, example: A }
+        '400':
+          description: Moins de 2 mouvements, ligne invalide, ou sélection déséquilibrée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Une des écritures référencées est introuvable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Une ligne de la sélection est déjà lettrée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/lettrage/{societeId}/{compte}/auto:
+    post:
+      operationId: postApiLettrageBySocieteIdAndCompteAuto
+      tags: [Lettrage]
+      summary: Lettrage automatique des correspondances exactes 1 pour 1
+      description: Recherche, parmi les mouvements non lettrés, les paires débit/crédit de montant strictement identique.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/CompteAuxPathParam'
+      responses:
+        '200':
+          description: Lettrages automatiques effectués
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  nbLettrages: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/lettrage/{societeId}/{compte}/{lettre}:
+    delete:
+      operationId: deleteApiLettrageBySocieteIdAndCompteAndLettre
+      tags: [Lettrage]
+      summary: Annule un lettrage (les écritures elles-mêmes ne sont pas touchées)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/CompteAuxPathParam'
+        - name: lettre
+          in: path
+          required: true
+          schema: { type: string, example: A }
+      responses:
+        '200':
+          description: Lettrage annulé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Ventes ────────────────────────────────────────────
+  /api/factures/{societeId}:
+    get:
+      operationId: getApiFacturesBySocieteId
+      tags: [Ventes]
+      summary: Factures de vente de la société
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: statut
+          in: query
+          schema: { $ref: '#/components/schemas/StatutFactureVente' }
+      responses:
+        '200':
+          description: Liste des factures de vente
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FactureVente' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiFacturesBySocieteId
+      tags: [Ventes]
+      summary: Crée une facture de vente en brouillon
+      description: Aucune écriture comptable n'est générée à la création — voir `POST /{id}/facturer`.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FactureVenteCreateRequest' }
+      responses:
+        '201':
+          description: Facture créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FactureVente' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/factures/{societeId}/{id}:
+    get:
+      operationId: getApiFacturesBySocieteIdAndId
+      tags: [Ventes]
+      summary: Détail d'une facture de vente
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Facture de vente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FactureVente' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putApiFacturesBySocieteIdAndId
+      tags: [Ventes]
+      summary: Modifie une facture en brouillon
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FactureVenteUpdateRequest' }
+      responses:
+        '200':
+          description: Facture mise à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Seules les factures en brouillon peuvent être modifiées
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      operationId: deleteApiFacturesBySocieteIdAndId
+      tags: [Ventes]
+      summary: Supprime une facture en brouillon
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Facture supprimée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Seules les factures en brouillon peuvent être supprimées
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/factures/{societeId}/{id}/valider:
+    post:
+      operationId: postApiFacturesBySocieteIdAndIdValider
+      tags: [Ventes]
+      summary: "Confirme la facture (aucune écriture comptable : pas encore émise)"
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Facture validée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Cette facture a déjà été validée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/factures/{societeId}/{id}/facturer:
+    post:
+      operationId: postApiFacturesBySocieteIdAndIdFacturer
+      tags: [Ventes]
+      summary: Comptabilise l'émission (débit 411 client / crédit comptes de produit)
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string, format: date, description: Défaut = aujourd'hui }
+      responses:
+        '200':
+          description: Facture émise et comptabilisée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400':
+          description: Échec de création de l'écriture (voir la section "Écritures comptables")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La facture doit être validée avant d'être émise
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/factures/{societeId}/{id}/encaisser:
+    post:
+      operationId: postApiFacturesBySocieteIdAndIdEncaisser
+      tags: [Ventes]
+      summary: Comptabilise l'encaissement (débit trésorerie / crédit 411 client)
+      description: Le journal (Caisse `CA` ou Banque `BQ`) est déduit automatiquement selon que `compteTresorerie` commence par `57`.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [compteTresorerie]
+              properties:
+                compteTresorerie: { type: string, example: '521' }
+                date: { type: string, format: date, description: Défaut = aujourd'hui }
+      responses:
+        '200':
+          description: Encaissement comptabilisé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: La facture doit être émise avant l'encaissement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Rapprochement bancaire ────────────────────────────
+  /api/rapprochement/{societeId}/{compte}:
+    get:
+      operationId: getApiRapprochementBySocieteIdAndCompte
+      tags: [Rapprochement bancaire]
+      summary: Mouvements d'un compte de trésorerie avec solde comptable / pointé / théorique du relevé
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/CompteAuxPathParam'
+        - name: dateFin
+          in: query
+          description: Ne conserve que les mouvements jusqu'à cette date
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Mouvements et soldes du compte
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rapprochement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/rapprochement/{societeId}/{compte}/pointer:
+    post:
+      operationId: postApiRapprochementBySocieteIdAndComptePointer
+      tags: [Rapprochement bancaire]
+      summary: Bascule le pointage d'une ligne
+      description: |
+        Purement déclaratif — ne modifie jamais le débit/crédit d'une ligne, donc reste
+        autorisé même sur un exercice clôturé.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/CompteAuxPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ecritureId, ligneIndex]
+              properties:
+                ecritureId: { type: string }
+                ligneIndex: { type: integer }
+                pointe: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Pointage mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400':
+          description: ecritureId/ligneIndex manquant, ou ligne invalide pour ce compte
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Export ────────────────────────────────────────────
+  /api/export/{societeId}/fec:
+    get:
+      operationId: getApiExportBySocieteIdFec
+      tags: [Export]
+      summary: Génère et télécharge le Fichier des Écritures Comptables (FEC) de l'exercice
+      description: |
+        Fichier texte tabulé (colonnes inspirées du FEC français), encodé UTF-8 avec BOM,
+        exploitable par tout expert-comptable ou tableur. Renvoyé en téléchargement
+        (`Content-Disposition: attachment`), pas en JSON.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: exercice
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Fichier FEC (texte tabulé, `.txt`)
+          content:
+            text/plain:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ── Modèles ───────────────────────────────────────────
+  /api/modeles/{societeId}:
+    get:
+      operationId: getApiModelesBySocieteId
+      tags: [Modèles]
+      summary: Modèles d'écritures récurrentes de la société, triés par nom
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      responses:
+        '200':
+          description: Liste des modèles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Modele' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: postApiModelesBySocieteId
+      tags: [Modèles]
+      summary: Crée un modèle d'écriture récurrente
+      description: |
+        Validation allégée par rapport à la création directe d'une écriture : un modèle
+        peut stocker des lignes à montant 0 (montant variable, saisi à chaque génération).
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModeleCreateRequest' }
+      responses:
+        '201':
+          description: Modèle créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Modele' }
+        '400':
+          description: nom/journalCode manquant, lignes invalides, ou journal inconnu pour cette société
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/modeles/{societeId}/{id}:
+    put:
+      operationId: putApiModelesBySocieteIdAndId
+      tags: [Modèles]
+      summary: Modifie un modèle d'écriture
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModeleUpdateRequest' }
+      responses:
+        '200':
+          description: Modèle mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '400':
+          description: Lignes invalides
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteApiModelesBySocieteIdAndId
+      tags: [Modèles]
+      summary: Supprime un modèle d'écriture
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Modèle supprimé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/modeles/{societeId}/{id}/generer:
+    post:
+      operationId: postApiModelesBySocieteIdAndIdGenerer
+      tags: [Modèles]
+      summary: Crée une vraie écriture comptabilisée à partir du modèle
+      description: |
+        `lignes` est optionnel : si omis, les lignes stockées dans le modèle sont utilisées
+        telles quelles (utile pour un modèle déjà valorisé) ; sinon les lignes fournies
+        remplacent celles du modèle pour cette génération uniquement (utile pour un modèle à
+        montants variables). `libelle` par défaut = nom du modèle.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date]
+              properties:
+                date: { type: string, format: date }
+                libelle: { type: string }
+                lignes:
+                  type: array
+                  items: { $ref: '#/components/schemas/LigneEcritureInput' }
+      responses:
+        '200':
+          description: Écriture générée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  ecritureId: { type: string }
+        '400':
+          description: date manquante, lignes invalides, ou échec de création de l'écriture (voir la section "Écritures comptables")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Audit Flash ───────────────────────────────────────
+  /api/audit-flash/{societeId}:
+    get:
+      operationId: getApiAuditFlashBySocieteId
+      tags: [Audit Flash]
+      summary: Croise CA réel encaissé, versements bancaires saisis et charges saisies sur une période
+      description: |
+        Rapport de lecture seule, à la demande : ne crée ni ne modifie aucune écriture.
+        Réservé à la société `cookafrica` (400 sinon) — c'est la seule dont le chiffre
+        d'affaires est piloté par une application externe ; pour Ohinéné, les ventes sont
+        déjà saisies directement en compta.
+
+        Croise trois sources pour la période `debut`–`fin` :
+        - le CA réel encaissé, obtenu par un appel serveur-à-serveur en lecture seule vers
+          `GET /api/integration/ca` de **cookafrica-app** (authentifié par clé de service
+          `X-Service-Key`, indépendante du JWT de l'utilisateur ERP-Compta qui appelle CET
+          endpoint) — seules les factures au statut `payee` y comptent ;
+        - les versements bancaires déjà saisis dans ERP-Compta (lignes au débit du compte
+          `512` sur la période) ;
+        - les charges déjà enregistrées dans ERP-Compta (lignes sur des comptes de classe 6
+          sur la période).
+
+        `beneficeReel` = CA − charges. `ecartTresorerie` = CA − versements : un écart notable
+        signale un montant non déposé/non justifié à examiner.
+      parameters:
+        - $ref: '#/components/parameters/SocieteIdPathParam'
+        - name: debut
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: fin
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Rapport Audit Flash
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditFlash' }
+        '400':
+          description: societeId différent de `cookafrica`, ou debut/fin manquant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500':
+          description: Échec de lecture en base, ou de l'appel à cookafrica-app (ex. clé de service invalide côté cookafrica-app) — remonté tel quel dans `error`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Jeton obtenu via `POST /api/auth/login`, valable 12h. Embarque `id`, `username`, `nom`, `role` et `societesAccess`.
+
+  parameters:
+    SocieteIdPathParam:
+      name: societeId
+      in: path
+      required: true
+      description: Identifiant de la société (ex. `ohinene`, `cookafrica`)
+      schema: { type: string }
+    IdPathParam:
+      name: id
+      in: path
+      required: true
+      description: Identifiant du document Firestore
+      schema: { type: string }
+    NumeroPathParam:
+      name: numero
+      in: path
+      required: true
+      description: Numéro de compte du plan comptable (ex. `601`)
+      schema: { type: string }
+    CompteAuxPathParam:
+      name: compte
+      in: path
+      required: true
+      description: Numéro de compte concerné (ex. `411001` pour un client, `512` pour une banque)
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Requête invalide
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Non authentifié (token manquant, invalide ou expiré)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Accès refusé (rôle insuffisant, ou société hors `societesAccess`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Ressource introuvable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    Role:
+      type: string
+      enum: [admin, comptable]
+
+    UserPublic:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        nom: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        societesAccess:
+          type: array
+          items: { type: string }
+          example: [ohinene, cookafrica]
+
+    Societe:
+      type: object
+      properties:
+        id: { type: string, example: ohinene }
+        nom: { type: string, example: Hôtel Ohinéné }
+        sigle: { type: string, example: OHINENE }
+        devise: { type: string, example: XOF }
+        exerciceCourant: { type: integer, example: 2026 }
+        exercicesClotures:
+          type: array
+          items: { type: integer }
+          description: Exercices déjà clôturés — plus aucune écriture ne peut y être ajoutée
+
+    SocieteUpdateRequest:
+      type: object
+      properties:
+        nom: { type: string }
+        sigle: { type: string }
+        devise: { type: string }
+        exerciceCourant: { type: integer }
+
+    Compte:
+      type: object
+      properties:
+        societeId: { type: string }
+        numero: { type: string, example: '601' }
+        libelle: { type: string, example: Achats de marchandises }
+        classe: { type: integer, minimum: 1, maximum: 8, example: 6 }
+
+    CompteCreateRequest:
+      type: object
+      required: [numero, libelle, classe]
+      properties:
+        numero: { type: string }
+        libelle: { type: string }
+        classe: { type: integer, minimum: 1, maximum: 8 }
+
+    Journal:
+      type: object
+      properties:
+        societeId: { type: string }
+        code: { type: string, enum: [AC, VE, BQ, CA, OD, AN] }
+        libelle: { type: string, example: Journal des Achats }
+
+    LigneEcriture:
+      type: object
+      properties:
+        compte: { type: string }
+        libelle: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        lettre:
+          type: string
+          nullable: true
+          description: Renseigné une fois la ligne lettrée (voir module Lettrage)
+        pointe:
+          type: boolean
+          description: Renseigné pour une ligne d'un compte de trésorerie (voir module Rapprochement bancaire)
+
+    LigneEcritureInput:
+      type: object
+      required: [compte]
+      description: Une ligne doit être uniquement débitrice ou uniquement créditrice (jamais les deux, jamais nulle).
+      properties:
+        compte: { type: string }
+        libelle: { type: string }
+        debit: { type: number, minimum: 0, default: 0 }
+        credit: { type: number, minimum: 0, default: 0 }
+
+    Ecriture:
+      type: object
+      properties:
+        id: { type: string }
+        societeId: { type: string }
+        journalCode: { type: string }
+        numero:
+          type: integer
+          description: Séquentiel par société + journal + exercice
+        date: { type: string, format: date }
+        exercice: { type: integer }
+        libelle: { type: string }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneEcriture' }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+        updatedAt: { type: string, format: date-time }
+        extourneeParId:
+          type: string
+          nullable: true
+          description: Renseigné si cette écriture a été contre-passée
+        extourneeLe: { type: string, format: date-time, nullable: true }
+
+    EcritureCreateRequest:
+      type: object
+      required: [journalCode, date, libelle, exercice, lignes]
+      properties:
+        journalCode: { type: string, example: OD }
+        date: { type: string, format: date }
+        libelle: { type: string }
+        exercice: { type: integer }
+        lignes:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/LigneEcritureInput' }
+
+    GrandLivreLigne:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        journalCode: { type: string }
+        numero: { type: integer }
+        libelle: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        solde: { type: number, description: Solde progressif après cette ligne }
+
+    GrandLivre:
+      type: object
+      properties:
+        compte: { type: string }
+        soldeInitial: { type: number }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        soldeFinal: { type: number }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/GrandLivreLigne' }
+
+    BalanceLigne:
+      type: object
+      properties:
+        numero: { type: string }
+        libelle: { type: string }
+        classe: { type: integer }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        soldeDebiteur: { type: number }
+        soldeCrediteur: { type: number }
+
+    Balance:
+      type: object
+      properties:
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/BalanceLigne' }
+        totaux:
+          type: object
+          properties:
+            totalDebit: { type: number }
+            totalCredit: { type: number }
+            soldeDebiteur: { type: number }
+            soldeCrediteur: { type: number }
+
+    BilanLigne:
+      type: object
+      properties:
+        numero: { type: string }
+        libelle: { type: string }
+        montant: { type: number }
+
+    Bilan:
+      type: object
+      properties:
+        actif:
+          type: array
+          items: { $ref: '#/components/schemas/BilanLigne' }
+        passif:
+          type: array
+          items: { $ref: '#/components/schemas/BilanLigne' }
+        totalActif: { type: number }
+        totalPassif: { type: number }
+        equilibre: { type: boolean }
+
+    Resultat:
+      type: object
+      properties:
+        charges:
+          type: array
+          items: { $ref: '#/components/schemas/BilanLigne' }
+        produits:
+          type: array
+          items: { $ref: '#/components/schemas/BilanLigne' }
+        totalCharges: { type: number }
+        totalProduits: { type: number }
+        resultatNet: { type: number }
+
+    BalanceAuxiliaireLigne:
+      type: object
+      properties:
+        id: { type: string }
+        nom: { type: string }
+        compteNumero: { type: string }
+        totalDebit: { type: number }
+        totalCredit: { type: number }
+        solde: { type: number }
+
+    BalanceAuxiliaire:
+      type: object
+      properties:
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/BalanceAuxiliaireLigne' }
+        totaux:
+          type: object
+          properties:
+            totalDebit: { type: number }
+            totalCredit: { type: number }
+            solde: { type: number }
+
+    DeclarationTva:
+      type: object
+      properties:
+        dateDebut: { type: string, format: date }
+        dateFin: { type: string, format: date }
+        tvaCollectee: { type: number }
+        tvaDeductible: { type: number }
+        tvaNette: { type: number }
+        sens: { type: string, enum: [a_payer, credit_a_reporter] }
+
+    Esg:
+      type: object
+      description: État des Soldes de Gestion — soldes intermédiaires successifs du compte de résultat SYSCOHADA.
+      properties:
+        exercice: { type: integer }
+        ventesMarchandises: { type: number }
+        achatsMarchandises: { type: number }
+        margeCommerciale: { type: number }
+        productionExercice: { type: number }
+        achatsEtServicesExterieurs: { type: number }
+        valeurAjoutee: { type: number }
+        chargesPersonnel: { type: number }
+        impotsEtTaxes: { type: number }
+        excedentBrutExploitation: { type: number }
+        reprisesExploitation: { type: number }
+        dotationsExploitation: { type: number }
+        autresProduitsExploitation: { type: number }
+        resultatExploitation: { type: number }
+        produitsFinanciers: { type: number }
+        chargesFinancieres: { type: number }
+        resultatFinancier: { type: number }
+        resultatActivitesOrdinaires: { type: number }
+        produitsHAO: { type: number }
+        chargesHAO: { type: number }
+        resultatHAO: { type: number }
+        impotResultat: { type: number }
+        resultatNet: { type: number }
+
+    FluxTresorerie:
+      type: object
+      properties:
+        exercice: { type: integer }
+        exercicePrecedent: { type: integer }
+        resultatNet: { type: number }
+        dotationsExploitation: { type: number }
+        reprisesExploitation: { type: number }
+        cafg: { type: number, description: Capacité d'autofinancement globale }
+        variationBfr: { type: number }
+        fluxExploitation: { type: number }
+        fluxInvestissement: { type: number }
+        fluxFinancement: { type: number }
+        variationTresorerieCalculee: { type: number }
+        variationTresorerieBilan: { type: number }
+        ecartControle: { type: number, description: Écart entre la variation calculée et la variation constatée au bilan — devrait être proche de 0 }
+
+    Employe:
+      type: object
+      description: Schéma défini et maintenu par App-Gestion-Employees ; champs ci-dessous observés dans l'usage côté ERP-Compta.
+      properties:
+        employeId: { type: string }
+        nom: { type: string }
+        matricule: { type: string }
+        poste: { type: string }
+        etablissementsAccess:
+          type: array
+          items: { type: string }
+          description: Sociétés/établissements auxquels cet employé est rattaché — sert au filtrage par `societesAccess` côté ERP-Compta
+
+    Pointage:
+      type: object
+      description: Schéma défini et maintenu par App-Gestion-Employees (pointage QR).
+
+    FichePaie:
+      type: object
+      properties:
+        id: { type: string }
+        societeId: { type: string }
+        employeId: { type: string }
+        employeNom: { type: string }
+        matricule: { type: string }
+        poste: { type: string }
+        periode: { type: string, example: '2026-08' }
+        heuresPointees: { type: number }
+        heuresCongesPayees: { type: number }
+        totalHeures: { type: number }
+        heuresAttenduesMois: { type: number }
+        salaireMensuelBase: { type: number }
+        salaireBrutCalcule: { type: number }
+        avanceDeduite: { type: number }
+        salaireNet: { type: number }
+        statut: { type: string, enum: [brouillon, validee, payee] }
+        ecritureId: { type: string, nullable: true }
+        ecriturePaiementId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    Tiers:
+      type: object
+      properties:
+        id: { type: string }
+        societeId: { type: string }
+        type: { type: string, enum: [client, fournisseur] }
+        nom: { type: string }
+        compteNumero: { type: string, description: Compte auxiliaire généré automatiquement (411xxx ou 401xxx) }
+        telephone: { type: string }
+        email: { type: string }
+        adresse: { type: string }
+        actif: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    TiersCreateRequest:
+      type: object
+      required: [type, nom]
+      properties:
+        type: { type: string, enum: [client, fournisseur] }
+        nom: { type: string }
+        telephone: { type: string }
+        email: { type: string }
+        adresse: { type: string }
+
+    TiersUpdateRequest:
+      type: object
+      properties:
+        nom: { type: string }
+        telephone: { type: string }
+        email: { type: string }
+        adresse: { type: string }
+
+    LigneMontant:
+      type: object
+      properties:
+        compte: { type: string }
+        libelle: { type: string }
+        montant: { type: number }
+
+    LigneMontantInput:
+      type: object
+      required: [compte, montant]
+      properties:
+        compte: { type: string }
+        libelle: { type: string }
+        montant: { type: number, exclusiveMinimum: 0 }
+
+    StatutBonCommande:
+      type: string
+      enum: [brouillon, validee, recue, payee]
+
+    BonCommande:
+      type: object
+      properties:
+        id: { type: string }
+        societeId: { type: string }
+        numero: { type: string, example: BC-0001 }
+        fournisseurId: { type: string }
+        fournisseurNom: { type: string }
+        fournisseurCompte: { type: string }
+        date: { type: string, format: date }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneMontant' }
+        montantTotal: { type: number }
+        statut: { $ref: '#/components/schemas/StatutBonCommande' }
+        ecritureReceptionId: { type: string, nullable: true }
+        ecriturePaiementId: { type: string, nullable: true }
+        dateReception: { type: string, format: date }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    BonCommandeCreateRequest:
+      type: object
+      required: [fournisseurId, date, lignes]
+      properties:
+        fournisseurId: { type: string }
+        date: { type: string, format: date }
+        lignes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/LigneMontantInput' }
+
+    BonCommandeUpdateRequest:
+      type: object
+      properties:
+        fournisseurId: { type: string }
+        date: { type: string, format: date }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneMontantInput' }
+
+    ClotureApercu:
+      type: object
+      properties:
+        exercice: { type: integer }
+        exerciceSuivant: { type: integer }
+        totalCharges: { type: number }
+        totalProduits: { type: number }
+        resultatNet: { type: number }
+        compteResultat:
+          type: string
+          nullable: true
+          description: '`120` (bénéfice) ou `129` (perte), null si résultat nul'
+        lignesResultat:
+          type: array
+          items: { $ref: '#/components/schemas/LigneEcriture' }
+        lignesANouveaux:
+          type: array
+          items: { $ref: '#/components/schemas/LigneEcriture' }
+        totalANDebit: { type: number }
+        totalANCredit: { type: number }
+
+    ClotureResultat:
+      type: object
+      properties:
+        message: { type: string }
+        exercice: { type: integer }
+        exerciceSuivant: { type: integer }
+        resultatNet: { type: number }
+        compteResultat: { type: string, nullable: true }
+        ecritureClotureId: { type: string, nullable: true }
+        ecritureAnId: { type: string, nullable: true }
+
+    MouvementLettrage:
+      type: object
+      properties:
+        ecritureId: { type: string }
+        ligneIndex: { type: integer }
+        date: { type: string, format: date }
+        journalCode: { type: string }
+        numero: { type: integer }
+        libelle: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        lettre: { type: string, nullable: true }
+
+    StatutFactureVente:
+      type: string
+      enum: [brouillon, validee, facturee, encaissee]
+
+    FactureVente:
+      type: object
+      properties:
+        id: { type: string }
+        societeId: { type: string }
+        numero: { type: string, example: FV-0001 }
+        clientId: { type: string }
+        clientNom: { type: string }
+        clientCompte: { type: string }
+        date: { type: string, format: date }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneMontant' }
+        montantTotal: { type: number }
+        statut: { $ref: '#/components/schemas/StatutFactureVente' }
+        ecritureFactureId: { type: string, nullable: true }
+        ecritureEncaissementId: { type: string, nullable: true }
+        dateFacture: { type: string, format: date }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    FactureVenteCreateRequest:
+      type: object
+      required: [clientId, date, lignes]
+      properties:
+        clientId: { type: string }
+        date: { type: string, format: date }
+        lignes:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/LigneMontantInput' }
+
+    FactureVenteUpdateRequest:
+      type: object
+      properties:
+        clientId: { type: string }
+        date: { type: string, format: date }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneMontantInput' }
+
+    MouvementRapprochement:
+      type: object
+      properties:
+        ecritureId: { type: string }
+        ligneIndex: { type: integer }
+        date: { type: string, format: date }
+        journalCode: { type: string }
+        numero: { type: integer }
+        libelle: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        pointe: { type: boolean }
+
+    Rapprochement:
+      type: object
+      properties:
+        mouvements:
+          type: array
+          items: { $ref: '#/components/schemas/MouvementRapprochement' }
+        soldeComptable: { type: number }
+        soldeNonPointe: { type: number }
+        soldeTheoriqueReleve: { type: number, description: soldeComptable − soldeNonPointe }
+
+    Modele:
+      type: object
+      properties:
+        id: { type: string }
+        societeId: { type: string }
+        nom: { type: string }
+        journalCode: { type: string }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneEcriture' }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ModeleCreateRequest:
+      type: object
+      required: [nom, journalCode, lignes]
+      properties:
+        nom: { type: string }
+        journalCode: { type: string }
+        lignes:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/LigneEcritureInput' }
+
+    ModeleUpdateRequest:
+      type: object
+      properties:
+        nom: { type: string }
+        journalCode: { type: string }
+        lignes:
+          type: array
+          items: { $ref: '#/components/schemas/LigneEcritureInput' }
+
+    AuditFlashMouvement:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        journalCode: { type: string }
+        numero: { type: integer }
+        libelle: { type: string }
+        montant: { type: number }
+
+    AuditFlashCharge:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        journalCode: { type: string }
+        numero: { type: integer }
+        compte: { type: string }
+        compteLibelle: { type: string }
+        libelle: { type: string }
+        montant: { type: number }
+
+    AuditFlash:
+      type: object
+      properties:
+        debut: { type: string, format: date }
+        fin: { type: string, format: date }
+        chiffreAffaires: { type: number, description: Total des factures payées côté cookafrica-app sur la période }
+        chiffreAffairesParMode:
+          type: object
+          additionalProperties: { type: number }
+          example: { especes: 2685000, carte: 298500 }
+        nombreFactures: { type: integer }
+        versements: { type: number, description: Somme des débits du compte 512 saisis dans ERP-Compta sur la période }
+        versementsDetail:
+          type: array
+          items: { $ref: '#/components/schemas/AuditFlashMouvement' }
+        charges: { type: number, description: Somme nette (débit − crédit) des lignes sur comptes de classe 6 saisies dans ERP-Compta sur la période }
+        chargesDetail:
+          type: array
+          items: { $ref: '#/components/schemas/AuditFlashCharge' }
+        beneficeReel: { type: number, description: chiffreAffaires − charges }
+        ecartTresorerie: { type: number, description: chiffreAffaires − versements — un écart notable signale un montant non déposé/non justifié }
