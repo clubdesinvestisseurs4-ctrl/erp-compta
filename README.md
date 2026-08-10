@@ -94,18 +94,25 @@ VITE_API_BASE=http://localhost:3002
 
 ---
 
-## 4. Déploiement Backend → Render
+## 4. Déploiement Backend → Google Cloud Run
 
-1. Pousser le dépôt sur GitHub.
-2. Sur [Render](https://render.com/), **New > Web Service**, connecter le repo.
-3. Render détecte `server/render.yaml` (rootDir `server`, build `npm install`, start `node server.js`).
-4. Ajouter manuellement dans les variables d'environnement du service :
-   - `FIREBASE_PROJECT_ID`
-   - `FIREBASE_CLIENT_EMAIL`
-   - `FIREBASE_PRIVATE_KEY` (avec les `\n`)
-   - `CLIENT_URL` → URL Vercel du frontend (ex: `https://erp-compta.vercel.app`)
-   - `JWT_SECRET` est généré automatiquement par `render.yaml`
-5. Déployer, puis vérifier `https://<service>.onrender.com/health`.
+En prod, le backend tourne sur **Cloud Run** (projet GCP `erp-compta`, service `erp-compta-api`,
+région `us-central1`) — pas sur Render, malgré `server/render.yaml` resté ici pour un déploiement
+alternatif éventuel. Le déploiement est automatique : `.github/workflows/deploy-backend.yml` build
+et déploie sur Cloud Run à chaque push sur `main` touchant `server/**`, via le compte de service
+`github-deployer@erp-compta.iam.gserviceaccount.com` (clé stockée dans le secret GitHub `GCP_SA_KEY`
+du dépôt, `GCP_PROJECT_ID=erp-compta`).
+
+Variables d'environnement à définir sur le service Cloud Run (`gcloud run services update
+erp-compta-api --region=us-central1 --update-env-vars=...` ou console GCP) :
+- `JWT_SECRET`
+- `CLIENT_URL` → URL Vercel du frontend
+- `GESTION_EMPLOYEES_API_URL` / `GESTION_EMPLOYEES_API_KEY` — intégration App-Gestion-Employees
+- `COOKAFRICA_API_URL` / `COOKAFRICA_API_KEY` — intégration cookafrica-app (module Audit Flash)
+- Firebase : aucune variable requise — Cloud Run utilise les Application Default Credentials du
+  compte de service attaché à l'instance (rôle Firestore accordé côté IAM), comme cookafrica-app.
+
+Vérifier `https://erp-compta-api-541617482949.us-central1.run.app/health` après déploiement.
 
 ---
 
@@ -115,8 +122,8 @@ VITE_API_BASE=http://localhost:3002
 2. Définir le **Root Directory** sur `client`.
 3. Build command : `npm run build`, Output directory : `dist` (détecté automatiquement par Vite).
 4. Ajouter la variable d'environnement :
-   - `VITE_API_BASE` → URL Render du backend (ex: `https://erp-compta-api.onrender.com`)
-5. Déployer.
+   - `VITE_API_BASE` → URL Cloud Run du backend (`https://erp-compta-api-541617482949.us-central1.run.app`)
+5. Déployer (automatique via l'intégration Git Vercel à chaque push sur `main`).
 
 Une fois déployé, refaire les étapes de seed (section 2) en pointant vers l'URL Render de production.
 
