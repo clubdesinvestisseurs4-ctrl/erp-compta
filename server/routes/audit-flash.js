@@ -46,17 +46,41 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
 
     let versements = 0;
     let charges = 0;
+    const versementsDetail = [];
+    const chargesDetail = [];
+
     for (const ec of ecritures) {
       for (const ligne of ec.lignes) {
-        if (ligne.compte === '512') {
-          versements = round2(versements + (ligne.debit || 0));
+        if (ligne.compte === '512' && (ligne.debit || 0) > 0) {
+          versements = round2(versements + ligne.debit);
+          versementsDetail.push({
+            date: ec.date,
+            journalCode: ec.journalCode,
+            numero: ec.numero,
+            libelle: ligne.libelle || ec.libelle,
+            montant: round2(ligne.debit),
+          });
+          continue;
         }
         const compte = planComptable.get(ligne.compte);
         if (compte && compte.classe === 6) {
-          charges = round2(charges + (ligne.debit || 0) - (ligne.credit || 0));
+          const montant = round2((ligne.debit || 0) - (ligne.credit || 0));
+          charges = round2(charges + montant);
+          chargesDetail.push({
+            date: ec.date,
+            journalCode: ec.journalCode,
+            numero: ec.numero,
+            compte: ligne.compte,
+            compteLibelle: compte.libelle,
+            libelle: ligne.libelle || ec.libelle,
+            montant,
+          });
         }
       }
     }
+
+    versementsDetail.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    chargesDetail.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
     const beneficeReel = round2(ca.total - charges);
     const ecartTresorerie = round2(ca.total - versements);
@@ -67,7 +91,9 @@ router.get('/:societeId', authenticateToken, requireSocieteAccess, async (req, r
       chiffreAffairesParMode: ca.parMode,
       nombreFactures: ca.nombre,
       versements,
+      versementsDetail,
       charges,
+      chargesDetail,
       beneficeReel,
       ecartTresorerie,
     });
