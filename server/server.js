@@ -20,13 +20,17 @@ const PORT = process.env.PORT || 3002;
 // Render (et autres reverse proxies) injectent X-Forwarded-For
 app.set('trust proxy', 1);
 
+// Le projet Vercel "erp-compta" génère des URLs de prévisualisation du type
+// erp-compta-<hash>.vercel.app ou erp-compta-git-<branche>-<compte>.vercel.app.
+// Le motif ci-dessous couvre ces variantes sans autoriser n'importe quel projet *.vercel.app
+// (ex: evil-phisher.vercel.app), qui sont créables gratuitement par n'importe qui.
+// credentials retiré : l'auth se fait par JWT en en-tête Authorization (localStorage côté
+// client), jamais par cookie — inutile d'autoriser l'envoi de credentials cross-origin.
 app.use(cors({
   origin: [
     process.env.CLIENT_URL || 'http://localhost:5173',
-    /\.vercel\.app$/,
-    /\.web\.app$/,
+    /^https:\/\/erp-compta(-[\w.-]+)?\.vercel\.app$/,
   ],
-  credentials: true,
 }));
 
 app.use(express.json({ limit: '1mb' }));
