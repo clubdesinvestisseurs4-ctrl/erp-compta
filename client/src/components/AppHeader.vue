@@ -56,6 +56,7 @@ function logout() {
       <RouterLink to="/bilan-resultat">Bilan / Résultat</RouterLink>
       <RouterLink to="/esg">Soldes de gestion</RouterLink>
       <RouterLink to="/flux-tresorerie">Flux de trésorerie</RouterLink>
+      <RouterLink to="/audit-flash">Audit Flash</RouterLink>
       <RouterLink to="/tiers">Tiers</RouterLink>
       <RouterLink to="/commandes">Bons de commande</RouterLink>
       <RouterLink to="/factures">Factures de vente</RouterLink>
