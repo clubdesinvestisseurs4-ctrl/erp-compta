@@ -60,6 +60,7 @@ jobs:
     steps:
       - name: Clés AWS présentes ?
         if: env.HAS_AWS != 'true'
+        working-directory: .
         run: echo "::warning::Secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY absents — relais AWS non déployé (Render seul)."
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
