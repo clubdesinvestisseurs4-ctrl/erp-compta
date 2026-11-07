@@ -154,7 +154,7 @@ router.post('/:societeId/:id/valider', authenticateToken, requireSocieteAccess, 
         journalCode: 'OD',
         date: dernierJourMois(fiche.periode),
         libelle: `Salaire ${fiche.periode} - ${fiche.employeNom}`,
-        exercice,
+        exercice: Number(String(dernierJourMois(fiche.periode)).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: [
           { compte: COMPTE_CHARGE_SALAIRE, libelle: `Salaire ${fiche.periode} - ${fiche.employeNom}`, debit: fiche.salaireBrutCalcule, credit: 0 },
@@ -216,7 +216,7 @@ router.post('/:societeId/:id/payer', authenticateToken, requireSocieteAccess, as
         journalCode,
         date: datePaiement,
         libelle: `Paiement salaire ${fiche.periode} - ${fiche.employeNom}`,
-        exercice,
+        exercice: Number(String(datePaiement).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: [
           { compte: COMPTE_PERSONNEL_DU, libelle: `Paiement salaire ${fiche.periode} - ${fiche.employeNom}`, debit: fiche.salaireBrutCalcule, credit: 0 },

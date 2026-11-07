@@ -57,6 +57,7 @@ function logout() {
       <RouterLink to="/esg">Soldes de gestion</RouterLink>
       <RouterLink to="/flux-tresorerie">Flux de trésorerie</RouterLink>
       <RouterLink to="/audit-flash">Audit Flash</RouterLink>
+      <RouterLink to="/import-cookafrica">Import Cook Africa</RouterLink>
       <RouterLink to="/tiers">Tiers</RouterLink>
       <RouterLink to="/commandes">Bons de commande</RouterLink>
       <RouterLink to="/factures">Factures de vente</RouterLink>

@@ -221,7 +221,7 @@ watch(activeSociete, () => {
               <td data-label="Date">{{ ec.date }}</td>
               <td data-label="Journal">{{ ec.journalCode }}</td>
               <td data-label="N°">{{ ec.numero }}</td>
-              <td data-label="Libellé">{{ ec.libelle }} <span v-if="ec.extourneeParId" class="muted">(extournée)</span></td>
+              <td data-label="Libellé">{{ ec.libelle }} <span v-if="ec.pieceRef" class="muted">— pièce {{ ec.pieceRef }}</span> <span v-if="ec.extourneeParId" class="muted">(extournée)</span></td>
               <td class="num" data-label="Débit">{{ ec.totalDebit.toLocaleString('fr-FR') }}</td>
               <td class="num" data-label="Crédit">{{ ec.totalCredit.toLocaleString('fr-FR') }}</td>
               <td>

@@ -1,8 +1,45 @@
 import { TOKEN_KEY, forceLogout } from '../utils/session';
 
-// Tolère un VITE_API_BASE se terminant par "/" (sinon les requêtes partent en double slash,
-// ex: "https://host//api/societes" — certains bloqueurs de pub/proxys traitent ça comme suspect).
-const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3002').replace(/\/+$/, '');
+// Backend : Render (principal, gratuit — s'endort après 15 min sans visite) + relais AWS Lambda
+// (toujours chaud), même schéma que Cook Africa. L'ancien Cloud Run (VITE_API_BASE pointait
+// dessus) est abandonné depuis la coupure de la facturation GCP : variables renommées exprès
+// pour qu'une ancienne valeur restée sur Vercel ne le réactive pas.
+const local = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const sansSlash = (u) => (u || '').replace(/\/+$/, '');
+const API_PRINCIPALE = sansSlash(import.meta.env.VITE_API_URL || (local ? 'http://localhost:3002' : 'https://erp-compta.onrender.com'));
+const API_RELAIS = local ? '' : sansSlash(import.meta.env.VITE_API_FALLBACK_URL || '');
+
+let API_BASE = API_PRINCIPALE;
+
+// Au démarrage : si Render ne répond pas en 4 s (il dort), on passe sur AWS tout de suite ;
+// on revient sur Render dès qu'il est réveillé (vérifié toutes les 60 s).
+async function principaleRepond(timeoutMs) {
+  try {
+    const r = await fetch(`${API_PRINCIPALE}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function initBackend() {
+  if (!API_RELAIS) return;
+  if (!(await principaleRepond(4000))) API_BASE = API_RELAIS;
+  setInterval(async () => {
+    if (API_BASE === API_RELAIS && (await principaleRepond(8000))) API_BASE = API_PRINCIPALE;
+  }, 60_000);
+}
+
+async function fetchAvecRelais(path, options) {
+  try {
+    return await fetch(`${API_BASE}${path}`, options);
+  } catch (err) {
+    // Panne réseau sur Render : une seule nouvelle tentative, sur le relais.
+    if (!API_RELAIS || API_BASE === API_RELAIS) throw err;
+    API_BASE = API_RELAIS;
+    return fetch(`${API_BASE}${path}`, options);
+  }
+}
 
 // Le login peut légitimement renvoyer 401 (identifiants invalides) sans que
 // l'utilisateur n'ait jamais eu de session — ne pas le traiter comme une expiration.
@@ -25,7 +62,7 @@ async function request(path, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetchAvecRelais(path, { ...options, headers });
 
   if (handleUnauthorized(path, res.status)) {
     throw new Error('Session expirée, veuillez vous reconnecter.');
@@ -55,7 +92,7 @@ async function uploadFile(path, formData) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: formData });
+  const res = await fetchAvecRelais(path, { method: 'POST', headers, body: formData });
 
   if (handleUnauthorized(path, res.status)) {
     throw new Error('Session expirée, veuillez vous reconnecter.');
@@ -80,7 +117,7 @@ async function uploadFile(path, formData) {
 
 async function downloadFile(path, filename) {
   const token = localStorage.getItem(TOKEN_KEY);
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetchAvecRelais(path, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
@@ -119,4 +156,5 @@ export const api = {
   downloadFile,
 };
 
-export { API_BASE };
+// Valeur courante (Render ou relais) : lue au moment de l'appel, pas figée à l'import.
+export function getApiBase() { return API_BASE; }

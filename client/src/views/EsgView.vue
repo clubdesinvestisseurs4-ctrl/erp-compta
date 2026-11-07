@@ -43,6 +43,7 @@ const lignes = computed(() => {
     { libelle: 'Reprises d\'exploitation', montant: esg.value.reprisesExploitation },
     { libelle: 'Dotations aux amortissements et provisions', montant: -esg.value.dotationsExploitation },
     { libelle: 'Autres produits d\'exploitation', montant: esg.value.autresProduitsExploitation },
+    { libelle: 'Autres charges d\'exploitation', montant: -(esg.value.autresChargesExploitation || 0) },
     { libelle: 'RÉSULTAT D\'EXPLOITATION', montant: esg.value.resultatExploitation, total: true },
     { libelle: 'Produits financiers', montant: esg.value.produitsFinanciers },
     { libelle: 'Charges financières', montant: -esg.value.chargesFinancieres },
@@ -51,6 +52,7 @@ const lignes = computed(() => {
     { libelle: 'Produits HAO', montant: esg.value.produitsHAO },
     { libelle: 'Charges HAO', montant: -esg.value.chargesHAO },
     { libelle: 'RÉSULTAT HAO', montant: esg.value.resultatHAO, total: true },
+    { libelle: 'Participation des travailleurs', montant: -(esg.value.participation || 0) },
     { libelle: 'Impôts sur le résultat', montant: -esg.value.impotResultat },
     { libelle: 'RÉSULTAT NET', montant: esg.value.resultatNet, total: true },
   ];

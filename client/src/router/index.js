@@ -16,6 +16,7 @@ const routes = [
   { path: '/esg', name: 'esg', component: () => import('../views/EsgView.vue') },
   { path: '/flux-tresorerie', name: 'flux-tresorerie', component: () => import('../views/FluxTresorerieView.vue') },
   { path: '/audit-flash', name: 'audit-flash', component: () => import('../views/AuditFlashView.vue') },
+  { path: '/import-cookafrica', name: 'import-cookafrica', component: () => import('../views/ImportCookAfricaView.vue') },
   { path: '/employes', name: 'employes', component: () => import('../views/EmployesView.vue'), meta: { adminOnly: true } },
   { path: '/pointages', name: 'pointages', component: () => import('../views/PointagesView.vue') },
   { path: '/paie', name: 'paie', component: () => import('../views/PaieView.vue') },

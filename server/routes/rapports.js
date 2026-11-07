@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../firebase-admin');
 const { authenticateToken } = require('../middleware/auth');
 const { requireSocieteAccess } = require('../middleware/societe');
+const etats = require('../utils/etats');
 
 const router = express.Router({ mergeParams: true });
 
@@ -33,90 +34,22 @@ async function getPlanComptable(societeId) {
 }
 
 async function getSoldes(societeId, exercice, dateDebut, dateFin) {
-  const ecritures = await getEcritures(societeId, exercice, dateDebut, dateFin);
-  const soldes = new Map();
-  for (const ec of ecritures) {
-    for (const ligne of ec.lignes) {
-      const s = soldes.get(ligne.compte) || 0;
-      soldes.set(ligne.compte, round2(s + ligne.debit - ligne.credit));
-    }
-  }
-  return soldes;
+  return etats.soldesDepuisEcritures(await getEcritures(societeId, exercice, dateDebut, dateFin));
 }
 
-// Groupes de comptes utilisés pour l'État des Soldes de Gestion (SYSCOHADA), adaptés au plan
-// comptable réduit de cette application (pas de compte de variation de stock ni de production
-// stockée/immobilisée : ces lignes restent à 0 par construction).
-const ESG_GROUPES = {
-  ventesMarchandises: ['701'],
-  achatsMarchandises: ['601', '608', '6011', '6013'],
-  productionVendue: ['702', '704', '706', '7061', '7062', '707', '709'],
-  achatsEtServicesExterieurs: ['602', '604', '605', '611', '612', '614', '616', '618', '622', '624', '625', '626', '627', '628', '6281', '6285', '632', '633', '637', '638'],
-  chargesPersonnel: ['661', '663', '664', '666'],
-  impotsEtTaxes: ['641', '645', '646', '647'],
-  dotationsExploitation: ['681', '691'],
-  reprisesExploitation: ['781', '791'],
-  autresProduitsExploitation: ['758'],
-  chargesFinancieres: ['631', '671', '676'],
-  produitsFinanciers: ['776'],
-  chargesHAO: ['811'],
-  produitsHAO: ['821'],
-  impotResultat: ['695'],
-};
-
+// Somme brute (débit − crédit) d'une liste de comptes — utilisée par le flux de trésorerie.
 function sommeCharges(soldes, comptes) {
   return round2(comptes.reduce((s, c) => s + (soldes.get(c) || 0), 0));
 }
-function sommeProduits(soldes, comptes) {
-  return round2(comptes.reduce((s, c) => s - (soldes.get(c) || 0), 0));
-}
 
+// État des Soldes de Gestion : calcul dans utils/etats.js (tous les comptes 6/7/8 classés,
+// résultat identique au compte de résultat).
 async function calculerESG(societeId, exercice, dateDebut, dateFin) {
-  const soldes = await getSoldes(societeId, exercice, dateDebut, dateFin);
-  const G = ESG_GROUPES;
-
-  const ventesMarchandises = sommeProduits(soldes, G.ventesMarchandises);
-  const achatsMarchandises = sommeCharges(soldes, G.achatsMarchandises);
-  const margeCommerciale = round2(ventesMarchandises - achatsMarchandises);
-
-  const productionExercice = sommeProduits(soldes, G.productionVendue);
-
-  const achatsEtServicesExterieurs = sommeCharges(soldes, G.achatsEtServicesExterieurs);
-  const valeurAjoutee = round2(margeCommerciale + productionExercice - achatsEtServicesExterieurs);
-
-  const chargesPersonnel = sommeCharges(soldes, G.chargesPersonnel);
-  const impotsEtTaxes = sommeCharges(soldes, G.impotsEtTaxes);
-  const excedentBrutExploitation = round2(valeurAjoutee - chargesPersonnel - impotsEtTaxes);
-
-  const reprisesExploitation = sommeProduits(soldes, G.reprisesExploitation);
-  const dotationsExploitation = sommeCharges(soldes, G.dotationsExploitation);
-  const autresProduitsExploitation = sommeProduits(soldes, G.autresProduitsExploitation);
-  const resultatExploitation = round2(excedentBrutExploitation + reprisesExploitation - dotationsExploitation + autresProduitsExploitation);
-
-  const produitsFinanciers = sommeProduits(soldes, G.produitsFinanciers);
-  const chargesFinancieres = sommeCharges(soldes, G.chargesFinancieres);
-  const resultatFinancier = round2(produitsFinanciers - chargesFinancieres);
-
-  const resultatActivitesOrdinaires = round2(resultatExploitation + resultatFinancier);
-
-  const produitsHAO = sommeProduits(soldes, G.produitsHAO);
-  const chargesHAO = sommeCharges(soldes, G.chargesHAO);
-  const resultatHAO = round2(produitsHAO - chargesHAO);
-
-  const impotResultat = sommeCharges(soldes, G.impotResultat);
-  const resultatNet = round2(resultatActivitesOrdinaires + resultatHAO - impotResultat);
-
-  return {
-    exercice: Number(exercice),
-    ventesMarchandises, achatsMarchandises, margeCommerciale,
-    productionExercice, achatsEtServicesExterieurs, valeurAjoutee,
-    chargesPersonnel, impotsEtTaxes, excedentBrutExploitation,
-    reprisesExploitation, dotationsExploitation, autresProduitsExploitation, resultatExploitation,
-    produitsFinanciers, chargesFinancieres, resultatFinancier,
-    resultatActivitesOrdinaires,
-    produitsHAO, chargesHAO, resultatHAO,
-    impotResultat, resultatNet,
-  };
+  const [soldes, plan] = await Promise.all([
+    getSoldes(societeId, exercice, dateDebut, dateFin),
+    getPlanComptable(societeId),
+  ]);
+  return { exercice: Number(exercice), ...etats.calculerESG(soldes, plan) };
 }
 
 // Répartit les comptes d'une plage de classes en actif (solde débiteur) / passif (solde créditeur),
@@ -250,107 +183,37 @@ router.get('/:societeId/balance', authenticateToken, requireSocieteAccess, async
   }
 });
 
-// GET /api/rapports/:societeId/bilan?exercice=YYYY&dateDebut=&dateFin= — Actif / Passif (classes 1 à 5)
+// GET /api/rapports/:societeId/bilan?exercice=YYYY&dateDebut=&dateFin=
+// Présentation SYSCOHADA par rubriques (brut / amortissements / net à l'actif), résultat de
+// l'exercice en cours inclus au passif tant que l'exercice n'est pas clôturé.
 router.get('/:societeId/bilan', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
     const { exercice, dateDebut, dateFin } = req.query;
     if (!exercice) return res.status(400).json({ error: 'exercice requis' });
-
-    const [ecritures, planComptable] = await Promise.all([
-      getEcritures(societeId, exercice, dateDebut, dateFin),
+    const [soldes, plan] = await Promise.all([
+      getSoldes(societeId, exercice, dateDebut, dateFin),
       getPlanComptable(societeId),
     ]);
-
-    const soldes = new Map();
-    for (const ec of ecritures) {
-      for (const ligne of ec.lignes) {
-        const s = soldes.get(ligne.compte) || 0;
-        soldes.set(ligne.compte, round2(s + ligne.debit - ligne.credit));
-      }
-    }
-
-    const actif = [];
-    const passif = [];
-
-    for (const [numero, solde] of soldes.entries()) {
-      if (solde === 0) continue;
-      const compte = planComptable.get(numero) || { numero, libelle: '(compte inconnu)', classe: 0 };
-      const classe = compte.classe;
-      if (classe < 1 || classe > 5) continue; // classes 6/7/8 => compte de résultat
-
-      const entry = { numero, libelle: compte.libelle, montant: Math.abs(solde) };
-      if (classe === 1) {
-        // Ressources (capitaux propres, dettes financières) : normalement créditrices => passif
-        if (solde < 0) passif.push(entry); else actif.push(entry); // compte débiteur exceptionnel (ex: report déficitaire)
-      } else {
-        // Classes 2 à 5 (actif immobilisé, stocks, tiers, trésorerie)
-        if (solde >= 0) actif.push(entry); else passif.push(entry);
-      }
-    }
-
-    const totalActif = round2(actif.reduce((s, l) => s + l.montant, 0));
-    const totalPassif = round2(passif.reduce((s, l) => s + l.montant, 0));
-
-    res.json({
-      actif: actif.sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })),
-      passif: passif.sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })),
-      totalActif,
-      totalPassif,
-      equilibre: totalActif === totalPassif,
-    });
+    res.json(etats.calculerBilan(soldes, plan));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
-// GET /api/rapports/:societeId/resultat?exercice=YYYY&dateDebut=&dateFin= — Charges / Produits (classes 6 et 7)
+// GET /api/rapports/:societeId/resultat?exercice=YYYY&dateDebut=&dateFin=
+// Charges / Produits : classes 6 et 7, plus la classe 8 (Hors Activités Ordinaires, marquée hao).
 router.get('/:societeId/resultat', authenticateToken, requireSocieteAccess, async (req, res) => {
   try {
     const { societeId } = req.params;
     const { exercice, dateDebut, dateFin } = req.query;
     if (!exercice) return res.status(400).json({ error: 'exercice requis' });
-
-    const [ecritures, planComptable] = await Promise.all([
-      getEcritures(societeId, exercice, dateDebut, dateFin),
+    const [soldes, plan] = await Promise.all([
+      getSoldes(societeId, exercice, dateDebut, dateFin),
       getPlanComptable(societeId),
     ]);
-
-    const soldes = new Map();
-    for (const ec of ecritures) {
-      for (const ligne of ec.lignes) {
-        const s = soldes.get(ligne.compte) || 0;
-        soldes.set(ligne.compte, round2(s + ligne.debit - ligne.credit));
-      }
-    }
-
-    const charges = [];
-    const produits = [];
-
-    for (const [numero, solde] of soldes.entries()) {
-      if (solde === 0) continue;
-      const compte = planComptable.get(numero) || { numero, libelle: '(compte inconnu)', classe: 0 };
-      const classe = compte.classe;
-
-      if (classe === 6) {
-        charges.push({ numero, libelle: compte.libelle, montant: solde }); // normalement débiteur (positif)
-      } else if (classe === 7) {
-        produits.push({ numero, libelle: compte.libelle, montant: -solde }); // normalement créditeur (négatif -> positif)
-      }
-    }
-
-    const totalCharges = round2(charges.reduce((s, l) => s + l.montant, 0));
-    const totalProduits = round2(produits.reduce((s, l) => s + l.montant, 0));
-    const resultatNet = round2(totalProduits - totalCharges);
-
-    res.json({
-      charges: charges.sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })),
-      produits: produits.sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true })),
-      totalCharges,
-      totalProduits,
-      resultatNet,
-    });
+    res.json(etats.calculerResultat(soldes, plan));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur interne du serveur' });

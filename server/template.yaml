@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ERP Compta API — relais AWS Lambda pendant qu'un Render endormi se réveille.
+  Même base Firestore que Render ; identifiants posés par le workflow (jamais committés).
+
+Globals:
+  Function:
+    Timeout: 29
+    MemorySize: 512
+    Runtime: nodejs22.x
+
+Resources:
+  ErpComptaApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: erp-compta-api
+      CodeUri: .
+      Handler: lambda.handler
+      Environment:
+        Variables:
+          NODE_ENV: production
+          CLIENT_URL: https://erp-compta.vercel.app
+      Events:
+        RootApi:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+        ProxyApi:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: URL de base de l'API (repli AWS dans client/src/api/client.js)
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"

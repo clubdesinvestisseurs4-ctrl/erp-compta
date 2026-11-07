@@ -1,5 +1,6 @@
 const { db } = require('../firebase-admin');
 const { round2, createEcriture } = require('./ecritures');
+const { calculerResultat, estCompteResultat, classeDe } = require('./etats');
 
 const COMPTE_BENEFICE = '120';
 const COMPTE_PERTE = '129';
@@ -48,19 +49,13 @@ async function calculerCloture(societeId, exercice) {
     getPlanComptableMap(societeId),
   ]);
 
-  // Lignes de clôture du résultat : on solde chaque compte de charge (classe 6) et de produit (classe 7).
+  // Lignes de clôture du résultat : on solde chaque compte de charge et de produit — classes 6,
+  // 7 ET 8 (Hors Activités Ordinaires). Même calcul que le compte de résultat (utils/etats.js).
+  const { totalCharges, totalProduits } = calculerResultat(soldes, planComptable);
   const lignesResultat = [];
-  let totalCharges = 0;
-  let totalProduits = 0;
   for (const [numero, solde] of soldes.entries()) {
-    if (solde === 0) continue;
+    if (solde === 0 || !estCompteResultat(numero, planComptable)) continue;
     const compte = planComptable.get(numero);
-    const classe = compte ? compte.classe : 0;
-    if (classe !== 6 && classe !== 7) continue;
-
-    if (classe === 6) totalCharges = round2(totalCharges + solde);
-    if (classe === 7) totalProduits = round2(totalProduits - solde);
-
     lignesResultat.push({
       compte: numero,
       libelle: compte ? compte.libelle : numero,
@@ -91,7 +86,7 @@ async function calculerCloture(societeId, exercice) {
   for (const [numero, solde] of soldesApresCloture.entries()) {
     if (solde === 0) continue;
     const compte = planComptable.get(numero);
-    const classe = compte ? compte.classe : 0;
+    const classe = classeDe(numero, planComptable);
     if (classe < 1 || classe > 5) continue;
 
     lignesANouveaux.push({

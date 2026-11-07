@@ -74,6 +74,7 @@ app.use('/api/rapprochement', require('./routes/rapprochement'));
 app.use('/api/export', require('./routes/export'));
 app.use('/api/modeles', require('./routes/modeles'));
 app.use('/api/audit-flash', require('./routes/audit-flash'));
+app.use('/api/cookafrica', require('./routes/cookafrica'));
 
 // Health check (utile pour Render)
 app.get('/health', (_req, res) => {
@@ -95,7 +96,13 @@ app.use((err, _req, res, _next) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log(`✅  ERP Compta API démarrée sur le port ${PORT}`);
-  console.log(`📌  Health check : http://localhost:${PORT}/health`);
-});
+// Lancé directement (node server.js — Render, local) : écoute réseau normale.
+// lambda.js fait require('./server') et laisse AWS Lambda gérer l'écoute.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅  ERP Compta API démarrée sur le port ${PORT}`);
+    console.log(`📌  Health check : http://localhost:${PORT}/health`);
+  });
+}
+
+module.exports = app;

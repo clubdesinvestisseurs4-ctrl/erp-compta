@@ -226,7 +226,7 @@ router.post('/:societeId/:id/recevoir', authenticateToken, requireSocieteAccess,
         journalCode: 'AC',
         date: dateReception,
         libelle: `Réception ${commande.numero} - ${commande.fournisseurNom}`,
-        exercice,
+        exercice: Number(String(dateReception).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: lignesEcriture,
       });
@@ -275,7 +275,7 @@ router.post('/:societeId/:id/payer', authenticateToken, requireSocieteAccess, as
         journalCode,
         date: datePaiement,
         libelle: `Paiement ${commande.numero} - ${commande.fournisseurNom}`,
-        exercice,
+        exercice: Number(String(datePaiement).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: [
           { compte: commande.fournisseurCompte, libelle: `Paiement ${commande.numero} - ${commande.fournisseurNom}`, debit: commande.montantTotal, credit: 0 },

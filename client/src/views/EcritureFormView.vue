@@ -22,6 +22,7 @@ const form = ref({
   journalCode: '',
   date: today,
   libelle: '',
+  pieceRef: '',
 });
 
 const lignes = ref([
@@ -91,7 +92,9 @@ async function onSubmit() {
       journalCode: form.value.journalCode,
       date: form.value.date,
       libelle: form.value.libelle,
-      exercice: activeSociete.value.exerciceCourant,
+      pieceRef: form.value.pieceRef,
+      // L'exercice est l'année de la date de l'opération (contrôlé aussi côté serveur).
+      exercice: Number(form.value.date.slice(0, 4)),
       lignes: lignesValides.map(l => ({
         compte: l.compte,
         libelle: l.libelle,
@@ -130,6 +133,10 @@ watch(activeSociete, loadRefs, { immediate: true });
         <label style="flex: 1;">
           Libellé de l'écriture
           <input v-model="form.libelle" type="text" placeholder="ex: Achat fournitures restaurant" required />
+        </label>
+        <label>
+          N° de pièce justificative
+          <input v-model="form.pieceRef" type="text" maxlength="60" placeholder="ex: facture F-2026-118, reçu n°45" />
         </label>
       </div>
 

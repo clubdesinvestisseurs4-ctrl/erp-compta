@@ -3,6 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import './style.css';
+import { initBackend } from './api/client';
 
 const app = createApp(App);
 
@@ -10,6 +11,7 @@ app.use(createPinia());
 app.use(router);
 
 app.mount('#app');
+initBackend();
 
 // Si un chunk dynamique (vue lazy-loaded) échoue à charger - typiquement
 // parce qu'une nouvelle version a été déployée et que les anciens hashs

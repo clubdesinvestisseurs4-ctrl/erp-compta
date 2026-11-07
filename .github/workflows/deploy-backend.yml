@@ -1,4 +1,8 @@
-name: Backend — CI/CD (Cloud Run)
+name: Backend — CI/CD (Render + AWS Lambda)
+
+# Cloud Run (GCP) abandonné en novembre 2026 : la facturation GCP est coupée, le service
+# répondait 503. Même architecture que Cook Africa : Render (principal, gratuit, s'endort)
+# + AWS Lambda (relais toujours chaud pendant que Render se réveille).
 
 on:
   push:
@@ -6,27 +10,122 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/deploy-backend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
   workflow_dispatch: {}
 
 jobs:
-  deploy:
-    name: Déploiement sur Cloud Run
+  test:
+    name: Tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    defaults:
+      run:
+        working-directory: server
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Authentification GCP
-        uses: google-github-actions/auth@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm test
 
-      - name: Déploiement Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
+  deploy-render:
+    name: Deploy sur Render
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déclenche le déploiement via le Deploy Hook Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "RENDER_DEPLOY_HOOK_URL absent — Render redéploie déjà tout seul à chaque push (autoDeploy)"; exit 0; fi
+          status=$(curl -s -o /tmp/render_deploy.json -w "%{http_code}" "$HOOK")
+          if [ "$status" != "200" ]; then echo "Échec du déclenchement Render (HTTP $status)" >&2; exit 1; fi
+
+  deploy-aws-lambda:
+    name: Deploy sur AWS Lambda (relais)
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      HAS_AWS: ${{ secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' }}
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Clés AWS présentes ?
+        if: env.HAS_AWS != 'true'
+        run: echo "::warning::Secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY absents — relais AWS non déployé (Render seul)."
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: env.HAS_AWS == 'true'
+
+      - uses: aws-actions/setup-sam@f84ec7d548307efafe33230528756de3c5841a17 # v2
+        if: env.HAS_AWS == 'true'
         with:
-          service: erp-compta-api
-          region: us-central1
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          source: ./server
+          use-installer: true
+
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        if: env.HAS_AWS == 'true'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - if: env.HAS_AWS == 'true'
+        run: sam build
+
+      - if: env.HAS_AWS == 'true'
+        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+
+      # Variables sensibles posées via un JSON construit par jq (pas en paramètres
+      # CloudFormation : une clé privée multi-lignes n'y survit pas — vécu sur Cook Africa).
+      # MÊME JWT_SECRET que Render, pour qu'une session reste valide lors d'une bascule.
+      - name: Configure les variables d'environnement sensibles
+        if: env.HAS_AWS == 'true'
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          JWT_SECRET: ${{ secrets.ERP_JWT_SECRET }}
+          COOKAFRICA_API_KEY: ${{ secrets.COOKAFRICA_API_KEY }}
+          GESTION_EMPLOYEES_API_KEY: ${{ secrets.GESTION_EMPLOYEES_API_KEY }}
+        run: |
+          jq -n \
+            --arg projectId "$FIREBASE_PROJECT_ID" \
+            --arg clientEmail "$FIREBASE_CLIENT_EMAIL" \
+            --arg privateKey "$FIREBASE_PRIVATE_KEY" \
+            --arg jwtSecret "$JWT_SECRET" \
+            --arg caKey "$COOKAFRICA_API_KEY" \
+            --arg geKey "$GESTION_EMPLOYEES_API_KEY" \
+            '{Variables: {
+              NODE_ENV: "production",
+              CLIENT_URL: "https://erp-compta.vercel.app",
+              FIREBASE_PROJECT_ID: $projectId,
+              FIREBASE_CLIENT_EMAIL: $clientEmail,
+              FIREBASE_PRIVATE_KEY: $privateKey,
+              JWT_SECRET: $jwtSecret,
+              COOKAFRICA_API_URL: "https://cookafrica-api.onrender.com",
+              COOKAFRICA_API_KEY: $caKey,
+              GESTION_EMPLOYEES_API_KEY: $geKey
+            }}' > /tmp/lambda-env.json
+          aws lambda update-function-configuration --function-name erp-compta-api --environment file:///tmp/lambda-env.json > /dev/null
+          rm -f /tmp/lambda-env.json
+          aws lambda wait function-updated --function-name erp-compta-api
+
+      - name: Vérifie /health
+        if: env.HAS_AWS == 'true'
+        run: |
+          url=$(aws cloudformation describe-stacks --stack-name erp-compta-api --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          echo "API AWS : $url"
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /tmp/health.json -w "%{http_code}" --max-time 10 "$url/health" || echo "000")
+            if [ "$code" = "200" ]; then echo "OK: $(cat /tmp/health.json)"; exit 0; fi
+            echo "tentative $i : HTTP $code"; sleep 5
+          done
+          exit 1

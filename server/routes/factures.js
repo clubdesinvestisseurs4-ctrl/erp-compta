@@ -226,7 +226,7 @@ router.post('/:societeId/:id/facturer', authenticateToken, requireSocieteAccess,
         journalCode: 'VE',
         date: dateFacture,
         libelle: `Facture ${facture.numero} - ${facture.clientNom}`,
-        exercice,
+        exercice: Number(String(dateFacture).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: lignesEcriture,
       });
@@ -275,7 +275,7 @@ router.post('/:societeId/:id/encaisser', authenticateToken, requireSocieteAccess
         journalCode,
         date: dateEncaissement,
         libelle: `Encaissement ${facture.numero} - ${facture.clientNom}`,
-        exercice,
+        exercice: Number(String(dateEncaissement).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: [
           { compte: String(compteTresorerie), libelle: `Encaissement ${facture.numero} - ${facture.clientNom}`, debit: facture.montantTotal, credit: 0 },

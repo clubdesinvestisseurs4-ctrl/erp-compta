@@ -141,9 +141,6 @@ router.post('/:societeId/:id/generer', authenticateToken, requireSocieteAccess, 
     const erreur = validerLignes(lignesAGenerer);
     if (erreur) return res.status(400).json({ error: erreur });
 
-    const societeDoc = await db.collection('societes').doc(societeId).get();
-    const exercice = societeDoc.data().exerciceCourant;
-
     let ecriture;
     try {
       ecriture = await createEcriture({
@@ -151,7 +148,7 @@ router.post('/:societeId/:id/generer', authenticateToken, requireSocieteAccess, 
         journalCode: modele.journalCode,
         date,
         libelle: libelle || modele.nom,
-        exercice,
+        exercice: Number(String(date).slice(0, 4)), // exercice = année de l'opération
         createdBy: req.user.username,
         lignes: normaliserLignes(lignesAGenerer),
       });
