@@ -134,7 +134,27 @@ function comptesDuMapping(mapping) {
   return [...new Set([mapping.compteVentes, ...Object.values(mapping.tresorerie), ...Object.values(mapping.charges)])];
 }
 
+// Fenêtre de la synchronisation automatique : les `jours` derniers jours jusqu'à hier (heure
+// d'Abidjan = UTC), jamais avant `depuis`, découpée par année (une écriture = un exercice).
+// Rejouer une fenêtre déjà importée ne fait rien : seules les corrections sont reprises.
+function periodesSync(maintenant, depuis, jours = 35) {
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const hier = new Date(Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth(), maintenant.getUTCDate() - 1));
+  const debutFenetre = new Date(hier.getTime() - (jours - 1) * 86_400_000);
+  let debut = iso(debutFenetre) < depuis ? depuis : iso(debutFenetre);
+  const fin = iso(hier);
+  const periodes = [];
+  while (debut <= fin) {
+    const finAnnee = `${debut.slice(0, 4)}-12-31`;
+    const f = finAnnee < fin ? finAnnee : fin;
+    periodes.push({ debut, fin: f });
+    debut = `${Number(debut.slice(0, 4)) + 1}-01-01`;
+  }
+  return periodes;
+}
+
 module.exports = {
+  periodesSync,
   MAPPING_DEFAUT, fusionnerMapping, planifierImport, comptesDuMapping,
   ecritureVentes, ecritureDepense,
 };

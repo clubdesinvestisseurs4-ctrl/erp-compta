@@ -96,6 +96,7 @@ jobs:
           JWT_SECRET: ${{ secrets.ERP_JWT_SECRET }}
           COOKAFRICA_API_KEY: ${{ secrets.COOKAFRICA_API_KEY }}
           GESTION_EMPLOYEES_API_KEY: ${{ secrets.GESTION_EMPLOYEES_API_KEY }}
+          ERP_SYNC_KEY: ${{ secrets.ERP_SYNC_KEY }}
         run: |
           jq -n \
             --arg projectId "$FIREBASE_PROJECT_ID" \
@@ -103,7 +104,7 @@ jobs:
             --arg privateKey "$FIREBASE_PRIVATE_KEY" \
             --arg jwtSecret "$JWT_SECRET" \
             --arg caKey "$COOKAFRICA_API_KEY" \
-            --arg geKey "$GESTION_EMPLOYEES_API_KEY" \
+            --arg geKey "$GESTION_EMPLOYEES_API_KEY"             --arg syncKey "$ERP_SYNC_KEY" \
             '{Variables: {
               NODE_ENV: "production",
               CLIENT_URL: "https://erp-compta.vercel.app",
@@ -113,7 +114,8 @@ jobs:
               JWT_SECRET: $jwtSecret,
               COOKAFRICA_API_URL: "https://cookafrica-api.onrender.com",
               COOKAFRICA_API_KEY: $caKey,
-              GESTION_EMPLOYEES_API_KEY: $geKey
+              GESTION_EMPLOYEES_API_KEY: $geKey,
+              ERP_SYNC_KEY: $syncKey
             }}' > /tmp/lambda-env.json
           aws lambda update-function-configuration --function-name erp-compta-api --environment file:///tmp/lambda-env.json > /dev/null
           rm -f /tmp/lambda-env.json

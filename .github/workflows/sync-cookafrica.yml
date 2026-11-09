@@ -1,0 +1,37 @@
+name: Synchro Cook Africa → comptabilité
+
+# Chaque nuit, les ventes encaissées et les dépenses saisies dans Cook Africa deviennent des
+# écritures dans ERP-Compta (voir POST /api/cookafrica/sync). Plus de double saisie : le
+# comptable consulte et contrôle. 02:30 UTC = 02:30 à Abidjan, la journée d'hier est close.
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Les deux serveurs Render gratuits dorment la nuit : on les réveille d'abord.
+      - name: Réveil des serveurs
+        run: |
+          for url in https://erp-compta.onrender.com/health https://cookafrica-api.onrender.com/health; do
+            for i in 1 2 3 4 5 6; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$url" || echo 000)
+              echo "$url → $code"; [ "$code" = "200" ] && break; sleep 10
+            done
+          done
+
+      - name: Synchronisation
+        env:
+          SYNC_KEY: ${{ secrets.ERP_SYNC_KEY }}
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /tmp/sync.json -w "%{http_code}" --max-time 240 -X POST \
+              -H "X-Sync-Key: $SYNC_KEY" https://erp-compta.onrender.com/api/cookafrica/sync || echo 000)
+            echo "HTTP $code"; cat /tmp/sync.json; echo
+            [ "$code" = "200" ] && exit 0
+            [ "$code" = "207" ] && { echo "::warning::Synchro faite avec des erreurs (voir ci-dessus)"; exit 0; }
+            sleep 30
+          done
+          exit 1

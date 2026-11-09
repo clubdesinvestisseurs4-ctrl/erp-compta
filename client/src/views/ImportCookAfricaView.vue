@@ -26,6 +26,7 @@ const apercu = ref(null);
 const loading = ref(false);
 const importing = ref(false);
 const filtre = ref('a-faire');
+const sync = ref(null);
 
 const STATUTS = {
   nouveau: 'À importer',
@@ -43,6 +44,7 @@ const aFaire = computed(() => apercu.value
 
 async function charger() {
   if (!activeSociete.value || activeSociete.value.id !== 'cookafrica') return;
+  api.get('/api/cookafrica/cookafrica/sync').then(r => { sync.value = r; }).catch(() => {});
   loading.value = true;
   apercu.value = null;
   try {
@@ -85,6 +87,24 @@ watch(activeSociete, charger, { immediate: true });
 
     <template v-else>
       <div class="card">
+        <h2>Synchronisation automatique</h2>
+        <p>
+          Chaque nuit, les ventes encaissées et les dépenses de la veille saisies dans Cook Africa
+          (depuis le {{ sync ? sync.depuis : '…' }}) sont passées automatiquement en écritures.
+          Les corrections faites dans l'app sur les 35 derniers jours sont reprises aussi.
+        </p>
+        <p v-if="sync && sync.dernier && sync.dernier.echec" class="error">
+          Dernière synchronisation ({{ new Date(sync.dernier.at).toLocaleString('fr-FR') }}) en échec : {{ sync.dernier.echec }}
+        </p>
+        <p v-else-if="sync && sync.dernier" class="muted">
+          Dernière synchronisation : {{ new Date(sync.dernier.at).toLocaleString('fr-FR') }} —
+          {{ sync.dernier.crees }} écriture(s) créée(s), {{ sync.dernier.extournes }} extourne(s)<span v-if="sync.dernier.erreurs && sync.dernier.erreurs.length">, {{ sync.dernier.erreurs.length }} erreur(s) : {{ sync.dernier.erreurs[0].error }}</span>.
+        </p>
+        <p v-else class="muted">Pas encore de synchronisation.</p>
+      </div>
+
+      <div class="card">
+        <h2>Import manuel</h2>
         <p class="muted">
           Les ventes encaissées (une écriture par jour) et les dépenses saisies dans l'application
           Cook Africa deviennent des écritures comptables. Rien n'est enregistré avant d'avoir cliqué

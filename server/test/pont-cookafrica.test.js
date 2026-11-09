@@ -67,3 +67,21 @@ test('mapping : surcharge partielle, clés inconnues ignorées', () => {
   assert.strictEqual(m.charges['marche-vivres'], MAPPING_DEFAUT.charges['marche-vivres']);
   assert.ok(!('pirate' in m.charges) && !('inconnu' in m));
 });
+
+const { periodesSync } = require('../utils/pontCookAfrica');
+
+test('synchro auto : 35 derniers jours jusqu\'à hier, jamais avant la date de départ', () => {
+  assert.deepStrictEqual(periodesSync(new Date('2026-11-09T02:30:00Z'), '2026-11-01'), [{ debut: '2026-11-01', fin: '2026-11-08' }]);
+  assert.deepStrictEqual(periodesSync(new Date('2026-12-20T02:30:00Z'), '2026-11-01'), [{ debut: '2026-11-15', fin: '2026-12-19' }]);
+});
+
+test('synchro auto : fenêtre à cheval sur deux années découpée par exercice', () => {
+  assert.deepStrictEqual(periodesSync(new Date('2027-01-10T02:30:00Z'), '2026-11-01'), [
+    { debut: '2026-12-06', fin: '2026-12-31' },
+    { debut: '2027-01-01', fin: '2027-01-09' },
+  ]);
+});
+
+test('synchro auto : rien à faire le jour même du départ', () => {
+  assert.deepStrictEqual(periodesSync(new Date('2026-11-01T02:30:00Z'), '2026-11-01'), []);
+});
