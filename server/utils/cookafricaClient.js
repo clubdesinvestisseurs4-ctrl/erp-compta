@@ -31,8 +31,9 @@ async function call(path) {
       return await appeler(base, path, i === 0 && BASE_URLS.length > 1 ? TIMEOUT_PRINCIPAL_MS : 25_000);
     } catch (err) {
       // Une vraie réponse d'erreur (clé refusée, période invalide) ne se corrige pas en changeant
-      // de serveur : seul un délai dépassé ou une panne réseau / 5xx déclenche le relais.
-      if (err.status && err.status < 500) throw err;
+      // de serveur : seul un délai dépassé, une panne réseau, un 5xx ou un 429 (Render au réveil
+      // ou quota par IP saturé) déclenche le relais.
+      if (err.status && err.status < 500 && err.status !== 429) throw err;
       derniere = err;
     }
   }
