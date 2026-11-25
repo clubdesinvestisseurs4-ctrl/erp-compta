@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, watch } from 'vue';
+import { onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { locale, translateDocument, translateNode } from './i18n';
 import { useAuthStore } from './stores/auth';
 import { useSocieteStore } from './stores/societe';
 import AppHeader from './components/AppHeader.vue';
@@ -10,13 +11,33 @@ import ConfirmDialog from './components/ConfirmDialog.vue';
 const route = useRoute();
 const auth = useAuthStore();
 const societeStore = useSocieteStore();
+let translationObserver;
+
+watch(locale, () => translateDocument());
 
 onMounted(() => {
+  translateDocument();
+  translationObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'characterData') translateNode(mutation.target);
+      else if (mutation.type === 'attributes') translateNode(mutation.target);
+      else for (const node of mutation.addedNodes) translateNode(node);
+    }
+  });
+  translationObserver.observe(document.body, {
+    childList: true,
+    characterData: true,
+    attributes: true,
+    subtree: true,
+    attributeFilter: ['placeholder', 'title', 'aria-label', 'data-label'],
+  });
   if (auth.isAuthenticated) {
     auth.scheduleExpiry();
     societeStore.fetchSocietes();
   }
 });
+
+onBeforeUnmount(() => translationObserver?.disconnect());
 
 watch(() => auth.isAuthenticated, (isAuth) => {
   if (isAuth) {

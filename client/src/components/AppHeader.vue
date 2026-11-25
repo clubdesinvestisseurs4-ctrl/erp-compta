@@ -3,10 +3,12 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useSocieteStore } from '../stores/societe';
+import { useI18n } from '../i18n';
 
 const router = useRouter();
 const auth = useAuthStore();
 const societeStore = useSocieteStore();
+const { locale, t } = useI18n();
 
 const societes = computed(() => societeStore.societes);
 const menuOpen = ref(false);
@@ -38,43 +40,51 @@ function logout() {
         <span class="brand-icon">EC</span>
         <span>ERP Compta</span>
       </div>
-      <button class="menu-toggle" type="button" @click="toggleMenu" aria-label="Menu">☰</button>
+      <button class="menu-toggle" type="button" @click="toggleMenu" :aria-label="t('menu')">☰</button>
     </div>
+
+    <label class="language-picker">
+      <span>{{ t('language') }}</span>
+      <select v-model="locale" :aria-label="t('language')">
+        <option value="fr">{{ locale === 'en' ? 'French' : 'Français' }}</option>
+        <option value="en">English</option>
+      </select>
+    </label>
 
     <select v-if="societes.length" class="societe-select" :value="societeStore.activeSocieteId" @change="onSocieteChange">
       <option v-for="s in societes" :key="s.id" :value="s.id">{{ s.nom }}</option>
     </select>
 
     <nav class="nav-links" @click="closeMenu">
-      <RouterLink to="/">Tableau de bord</RouterLink>
-      <RouterLink to="/plan-comptable">Plan comptable</RouterLink>
-      <RouterLink to="/journaux">Journaux</RouterLink>
-      <RouterLink to="/ecritures">Écritures</RouterLink>
-      <RouterLink to="/modeles-ecriture">Modèles récurrents</RouterLink>
-      <RouterLink to="/grand-livre">Grand livre</RouterLink>
-      <RouterLink to="/balance">Balance</RouterLink>
-      <RouterLink to="/bilan-resultat">Bilan / Résultat</RouterLink>
-      <RouterLink to="/esg">Soldes de gestion</RouterLink>
-      <RouterLink to="/flux-tresorerie">Flux de trésorerie</RouterLink>
-      <RouterLink to="/audit-flash">Audit Flash</RouterLink>
-      <RouterLink to="/import-cookafrica">Import Cook Africa</RouterLink>
-      <RouterLink to="/tiers">Tiers</RouterLink>
-      <RouterLink to="/commandes">Bons de commande</RouterLink>
-      <RouterLink to="/factures">Factures de vente</RouterLink>
-      <RouterLink to="/balance-auxiliaire">Balance auxiliaire</RouterLink>
-      <RouterLink to="/lettrage">Lettrage</RouterLink>
-      <RouterLink to="/rapprochement-bancaire">Rapprochement bancaire</RouterLink>
-      <RouterLink to="/declaration-tva">Déclaration TVA</RouterLink>
-      <RouterLink to="/pointages">Pointages</RouterLink>
-      <RouterLink to="/paie">Paie</RouterLink>
-      <RouterLink v-if="auth.isAdmin" to="/employes">Personnel</RouterLink>
-      <RouterLink v-if="auth.isAdmin" to="/societes">Sociétés</RouterLink>
-      <RouterLink v-if="auth.isAdmin" to="/cloture-exercice">Clôture d'exercice</RouterLink>
+      <RouterLink to="/">{{ t('dashboard') }}</RouterLink>
+      <RouterLink to="/plan-comptable">{{ t('chartOfAccounts') }}</RouterLink>
+      <RouterLink to="/journaux">{{ t('journals') }}</RouterLink>
+      <RouterLink to="/ecritures">{{ t('entries') }}</RouterLink>
+      <RouterLink to="/modeles-ecriture">{{ t('recurringTemplates') }}</RouterLink>
+      <RouterLink to="/grand-livre">{{ t('generalLedger') }}</RouterLink>
+      <RouterLink to="/balance">{{ t('trialBalance') }}</RouterLink>
+      <RouterLink to="/bilan-resultat">{{ t('incomeStatement') }}</RouterLink>
+      <RouterLink to="/esg">{{ t('managementBalances') }}</RouterLink>
+      <RouterLink to="/flux-tresorerie">{{ t('cashFlow') }}</RouterLink>
+      <RouterLink to="/audit-flash">{{ t('audit') }}</RouterLink>
+      <RouterLink to="/import-cookafrica">{{ t('importCook') }}</RouterLink>
+      <RouterLink to="/tiers">{{ t('thirdParties') }}</RouterLink>
+      <RouterLink to="/commandes">{{ t('purchaseOrders') }}</RouterLink>
+      <RouterLink to="/factures">{{ t('salesInvoices') }}</RouterLink>
+      <RouterLink to="/balance-auxiliaire">{{ t('subsidiaryLedger') }}</RouterLink>
+      <RouterLink to="/lettrage">{{ t('reconciliation') }}</RouterLink>
+      <RouterLink to="/rapprochement-bancaire">{{ t('bankReconciliation') }}</RouterLink>
+      <RouterLink to="/declaration-tva">{{ t('vatReturn') }}</RouterLink>
+      <RouterLink to="/pointages">{{ t('attendance') }}</RouterLink>
+      <RouterLink to="/paie">{{ t('payroll') }}</RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/employes">{{ t('staff') }}</RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/societes">{{ t('companies') }}</RouterLink>
+      <RouterLink v-if="auth.isAdmin" to="/cloture-exercice">{{ t('yearEnd') }}</RouterLink>
     </nav>
 
     <div class="sidebar-footer">
       <span class="muted">{{ auth.user?.nom }}</span>
-      <button class="btn secondary" @click="logout">Déconnexion</button>
+      <button class="btn secondary" @click="logout">{{ t('logout') }}</button>
     </div>
   </header>
 </template>
@@ -137,6 +147,9 @@ function logout() {
   width: 100%;
   transition: opacity 0.2s ease;
 }
+
+.language-picker { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: #dce6f0; font-size: 0.85rem; }
+.language-picker select { width: auto; min-width: 110px; }
 
 .nav-links {
   display: flex;

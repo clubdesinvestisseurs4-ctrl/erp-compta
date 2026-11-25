@@ -3,10 +3,12 @@ import { computed, ref, watch } from 'vue';
 import { useSocieteStore } from '../stores/societe';
 import { api } from '../api/client';
 import { useToastStore } from '../stores/toast';
+import { useI18n } from '../i18n';
 
 const societeStore = useSocieteStore();
 const activeSociete = computed(() => societeStore.activeSociete);
 const toast = useToastStore();
+const { t } = useI18n();
 
 const resultat = ref(null);
 const loading = ref(false);
@@ -28,36 +30,36 @@ watch(activeSociete, loadResultat, { immediate: true });
 
 <template>
   <div>
-    <h1>Tableau de bord</h1>
+    <h1>{{ t('dashboard') }}</h1>
 
     <div v-if="!activeSociete" class="card">
-      Chargement des sociétés...
+      {{ t('loadingCompanies') }}
     </div>
 
     <template v-else>
       <div class="card">
         <h2>{{ activeSociete.nom }}</h2>
         <p class="muted">
-          Exercice {{ activeSociete.exerciceCourant }} — Devise {{ activeSociete.devise }}
+          {{ t('fiscalYear') }} {{ activeSociete.exerciceCourant }} — {{ t('currency') }} {{ activeSociete.devise }}
         </p>
       </div>
 
-      <div v-if="loading" class="card">Chargement...</div>
+      <div v-if="loading" class="card">{{ t('loading') }}</div>
 
       <div v-else-if="resultat" class="card">
-        <h2>Compte de résultat (synthèse)</h2>
+        <h2>{{ t('incomeSummary') }}</h2>
         <table>
           <tbody>
             <tr>
-              <td>Total des produits</td>
+              <td>{{ t('totalIncome') }}</td>
               <td class="num">{{ resultat.totalProduits.toLocaleString('fr-FR') }}</td>
             </tr>
             <tr>
-              <td>Total des charges</td>
+              <td>{{ t('totalExpenses') }}</td>
               <td class="num">{{ resultat.totalCharges.toLocaleString('fr-FR') }}</td>
             </tr>
             <tr>
-              <td><strong>Résultat net</strong></td>
+              <td><strong>{{ t('netIncome') }}</strong></td>
               <td class="num"><strong>{{ resultat.resultatNet.toLocaleString('fr-FR') }}</strong></td>
             </tr>
           </tbody>
@@ -65,12 +67,12 @@ watch(activeSociete, loadResultat, { immediate: true });
       </div>
 
       <div class="card">
-        <h2>Accès rapides</h2>
+        <h2>{{ t('quickLinks') }}</h2>
         <p>
-          <RouterLink to="/ecritures/nouvelle" class="btn">Nouvelle écriture</RouterLink>
+          <RouterLink to="/ecritures/nouvelle" class="btn">{{ t('newEntry') }}</RouterLink>
         </p>
         <p class="muted">
-          Plan comptable, journaux, grand livre, balance et bilan/résultat sont accessibles depuis le menu en haut de page.
+          {{ t('dashboardHint') }}
         </p>
       </div>
     </template>
