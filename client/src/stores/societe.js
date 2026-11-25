@@ -5,6 +5,7 @@ export const useSocieteStore = defineStore('societe', {
   state: () => ({
     societes: [],
     activeSocieteId: localStorage.getItem('erp_societe') || null,
+    loadError: null,
   }),
 
   getters: {
@@ -13,9 +14,15 @@ export const useSocieteStore = defineStore('societe', {
 
   actions: {
     async fetchSocietes() {
-      this.societes = await api.get('/api/societes');
-      if (!this.activeSocieteId && this.societes.length > 0) {
-        this.setActiveSociete(this.societes[0].id);
+      this.loadError = null;
+      try {
+        this.societes = await api.get('/api/societes');
+        if (!this.activeSocieteId && this.societes.length > 0) {
+          this.setActiveSociete(this.societes[0].id);
+        }
+      } catch (error) {
+        this.loadError = error?.message || 'Unable to load companies.';
+        throw error;
       }
     },
 
@@ -27,6 +34,7 @@ export const useSocieteStore = defineStore('societe', {
     reset() {
       this.societes = [];
       this.activeSocieteId = null;
+      this.loadError = null;
       localStorage.removeItem('erp_societe');
     },
   },

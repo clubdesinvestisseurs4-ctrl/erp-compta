@@ -16,6 +16,7 @@ const messages = {
     totalIncome: 'Total des produits', totalExpenses: 'Total des charges', netIncome: 'Résultat net', quickLinks: 'Accès rapides',
     newEntry: 'Nouvelle écriture', dashboardHint: 'Plan comptable, journaux, grand livre, balance et bilan/résultat sont accessibles depuis le menu.',
     fiscalYear: 'Exercice', currency: 'Devise',
+    loadCompaniesError: 'Impossible de charger les sociétés. Vérifiez la connexion puis réessayez.', retry: 'Réessayer',
   },
   en: {
     language: 'Language', dashboard: 'Dashboard', chartOfAccounts: 'Chart of accounts', journals: 'Journals', entries: 'Entries',
@@ -29,6 +30,7 @@ const messages = {
     totalIncome: 'Total income', totalExpenses: 'Total expenses', netIncome: 'Net income', quickLinks: 'Quick links',
     newEntry: 'New entry', dashboardHint: 'Chart of accounts, journals, general ledger, trial balance and financial statements are available from the menu.',
     fiscalYear: 'Financial year', currency: 'Currency',
+    loadCompaniesError: 'Could not load companies. Check your connection and try again.', retry: 'Retry',
   },
 };
 
@@ -382,35 +384,61 @@ const vocabulary = {
 
 const wordPattern = /[A-Za-zÀ-ÖØ-öø-ÿ’'°]+/g;
 const sortedEnglishPhrases = Object.entries(englishPhrases).sort((a, b) => b[0].length - a[0].length);
+const protectedEnglishOutputs = [
+  ...Object.values(messages.en),
+  ...Object.values(englishPhrases),
+].filter(Boolean).sort((a, b) => b.length - a.length);
 const textOriginals = new WeakMap();
 const textOutputs = new WeakMap();
+const textLocales = new WeakMap();
 const attrOriginals = new WeakMap();
 const attrOutputs = new WeakMap();
+const attrLocales = new WeakMap();
 
 export function translateText(source, language = locale.value) {
   if (language !== 'en' || !source) return source;
+  const trimmed = source.trim();
+  const exactTranslation = englishPhrases[trimmed];
+  if (exactTranslation) return source.replace(trimmed, exactTranslation);
+
   let output = source;
-  for (const [french, english] of sortedEnglishPhrases) {
-    output = output.replaceAll(french, english);
+  const protectedPhrases = [];
+  let placeholderIndex = 0;
+  for (const english of protectedEnglishOutputs) {
+    if (!output.includes(english)) continue;
+    const placeholder = `\uE000${placeholderIndex++}\uE001`;
+    output = output.replaceAll(english, placeholder);
+    protectedPhrases.push([placeholder, english]);
   }
-  return output.replace(wordPattern, (word) => {
+  for (let i = 0; i < sortedEnglishPhrases.length; i++) {
+    const [french, english] = sortedEnglishPhrases[i];
+    if (!output.includes(french)) continue;
+    const placeholder = `\uE000${placeholderIndex++}\uE001`;
+    output = output.replaceAll(french, placeholder);
+    protectedPhrases.push([placeholder, english]);
+  }
+  output = output.replace(wordPattern, (word) => {
     const translated = vocabulary[word.toLocaleLowerCase('fr')];
     if (!translated) return word;
     if (word === word.toLocaleUpperCase('fr')) return translated.toLocaleUpperCase('en');
     if (word[0] === word[0].toLocaleUpperCase('fr')) return translated[0].toLocaleUpperCase('en') + translated.slice(1);
     return translated;
   });
+  for (const [placeholder, english] of protectedPhrases) output = output.replaceAll(placeholder, english);
+  return output;
 }
 
 export function translateNode(node) {
   if (node.nodeType === Node.TEXT_NODE) {
     const current = node.nodeValue;
     const lastOutput = textOutputs.get(node);
+    if (current === lastOutput && textLocales.get(node) === locale.value) return;
     if (lastOutput !== undefined && current !== lastOutput) textOriginals.set(node, current);
     const original = textOriginals.get(node) ?? current;
     const translated = translateText(original);
     if (translated !== current) node.nodeValue = translated;
     textOutputs.set(node, translated);
+    textLocales.set(node, locale.value);
     return;
   }
   if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -421,11 +449,15 @@ export function translateNode(node) {
     let outputs = attrOutputs.get(node);
     if (!outputs) { outputs = {}; attrOutputs.set(node, outputs); }
     const current = node.getAttribute(attribute);
+    const localeCache = attrLocales.get(node) || {};
+    if (current === outputs[attribute] && localeCache[attribute] === locale.value) continue;
     if (outputs[attribute] !== undefined && current !== outputs[attribute]) originals[attribute] = current;
     const original = originals[attribute] ?? current;
     const translated = translateText(original);
     if (translated !== current) node.setAttribute(attribute, translated);
     outputs[attribute] = translated;
+    localeCache[attribute] = locale.value;
+    attrLocales.set(node, localeCache);
   }
   for (const child of node.childNodes) translateNode(child);
 }

@@ -10,8 +10,9 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(router);
 
-app.mount('#app');
-initBackend();
+// Select the primary or fallback API before the authenticated app starts its
+// first data request; otherwise that request can remain attached to a sleeping backend.
+initBackend().finally(() => app.mount('#app'));
 
 // Si un chunk dynamique (vue lazy-loaded) échoue à charger - typiquement
 // parce qu'une nouvelle version a été déployée et que les anciens hashs

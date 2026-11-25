@@ -32,12 +32,12 @@ export async function initBackend() {
 
 async function fetchAvecRelais(path, options) {
   try {
-    return await fetch(`${API_BASE}${path}`, options);
+    return await fetch(`${API_BASE}${path}`, { ...options, signal: AbortSignal.timeout(30_000) });
   } catch (err) {
     // Panne réseau sur Render : une seule nouvelle tentative, sur le relais.
     if (!API_RELAIS || API_BASE === API_RELAIS) throw err;
     API_BASE = API_RELAIS;
-    return fetch(`${API_BASE}${path}`, options);
+    return fetch(`${API_BASE}${path}`, { ...options, signal: AbortSignal.timeout(30_000) });
   }
 }
 

@@ -26,6 +26,10 @@ async function loadResultat() {
 }
 
 watch(activeSociete, loadResultat, { immediate: true });
+
+function retryLoadSocietes() {
+  societeStore.fetchSocietes().catch(() => {});
+}
 </script>
 
 <template>
@@ -33,7 +37,8 @@ watch(activeSociete, loadResultat, { immediate: true });
     <h1>{{ t('dashboard') }}</h1>
 
     <div v-if="!activeSociete" class="card">
-      {{ t('loadingCompanies') }}
+      <p>{{ societeStore.loadError || t('loadingCompanies') }}</p>
+      <button v-if="societeStore.loadError" class="btn" type="button" @click="retryLoadSocietes">{{ t('retry') }}</button>
     </div>
 
     <template v-else>

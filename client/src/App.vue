@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { locale, translateDocument, translateNode } from './i18n';
 import { useAuthStore } from './stores/auth';
 import { useSocieteStore } from './stores/societe';
+import { useToastStore } from './stores/toast';
 import AppHeader from './components/AppHeader.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
@@ -11,7 +12,14 @@ import ConfirmDialog from './components/ConfirmDialog.vue';
 const route = useRoute();
 const auth = useAuthStore();
 const societeStore = useSocieteStore();
+const toast = useToastStore();
 let translationObserver;
+
+function loadSocietes() {
+  return societeStore.fetchSocietes().catch((error) => {
+    toast.error(error?.message || 'Unable to load companies.');
+  });
+}
 
 watch(locale, () => translateDocument());
 
@@ -33,7 +41,7 @@ onMounted(() => {
   });
   if (auth.isAuthenticated) {
     auth.scheduleExpiry();
-    societeStore.fetchSocietes();
+    loadSocietes();
   }
 });
 
@@ -41,7 +49,7 @@ onBeforeUnmount(() => translationObserver?.disconnect());
 
 watch(() => auth.isAuthenticated, (isAuth) => {
   if (isAuth) {
-    societeStore.fetchSocietes();
+    loadSocietes();
   }
 });
 </script>
